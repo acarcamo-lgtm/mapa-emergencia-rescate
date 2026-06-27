@@ -9,6 +9,7 @@ import {
   MIN_SEARCH_LEN,
   type MissingStatusFilter,
 } from "@/lib/missing";
+import { indexFace } from "@/lib/fr-api";
 import { isPersistent } from "@/lib/store";
 import { checkRateLimit, clientIp } from "@/lib/ratelimit";
 import { cached } from "@/lib/cache";
@@ -130,6 +131,12 @@ export async function POST(request: Request) {
       photo: body.photo,
       reportType,
     });
+
+    // Index the photo in FR-API for cross-platform face matching (fire-and-forget).
+    if (body.photo && person.photoUrl) {
+      indexFace(person.id, name, body.lastSeen ?? "", body.photo).catch(() => {});
+    }
+
     return NextResponse.json({ person }, { status: 201 });
   } catch {
     return NextResponse.json(

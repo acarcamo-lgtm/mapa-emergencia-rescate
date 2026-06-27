@@ -8,6 +8,17 @@ export type MissingReportType = "missing" | "found";
 export type FoundPlace = "hospital" | "street";
 type PersonStatus = "safe" | "deceased";
 
+interface FrMatch {
+  record_id: string;
+  person_name: string | null;
+  age: number | string | null;
+  last_seen_location: string | null;
+  image_url: string | null;
+  score: number;
+  band: "alta" | "media" | "baja";
+  source: string;
+}
+
 export interface MissingPersonPayload {
   name: string;
   age: string;
@@ -173,6 +184,24 @@ function StreetIcon({ className }: { className?: string }) {
   );
 }
 
+function PeopleIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      aria-hidden
+    >
+      <circle cx="9" cy="7" r="4" />
+      <path d="M2 21v-2a4 4 0 014-4h6a4 4 0 014 4v2" />
+      <circle cx="19" cy="7" r="3" />
+      <path d="M22 21v-1.5a3 3 0 00-2-2.83" />
+    </svg>
+  );
+}
+
 export default function MissingPersonForm({
   onCancel,
   onSubmit,
@@ -197,6 +226,21 @@ export default function MissingPersonForm({
   const [submitting, setSubmitting] = useState(false);
   const [consent, setConsent] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [frMatches, setFrMatches] = useState<FrMatch[]>([]);
+  const [frSearching, setFrSearching] = useState(false);
+  const [frError, setFrError] = useState<string | null>(null);
+  const [frDuplicate, setFrDuplicate] = useState<{
+    possible_duplicate: boolean;
+    candidates?: Array<{
+      record_id: string;
+      person_name: string | null;
+      image_url: string | null;
+      score: number;
+      source: string;
+    }>;
+  } | null>(null);
+  const [frDupLoading, setFrDupLoading] = useState(false);
+  const [frDupDismissed, setFrDupDismissed] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const isMissing = reportType === "missing";
@@ -218,6 +262,67 @@ export default function MissingPersonForm({
     };
   }, [onCancel]);
 
+  useEffect(() => {
+    if (!photo) {
+      setFrMatches([]);
+      setFrError(null);
+      return;
+    }
+    let cancelled = false;
+    setFrSearching(true);
+    setFrError(null);
+    fetch("/api/fr/search", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ photo }),
+    })
+      .then((res) => {
+        if (!res.ok) return res.json().then((d) => { throw new Error(d.error || "Error en la búsqueda"); });
+        return res.json();
+      })
+      .then((data) => {
+        if (cancelled) return;
+        setFrMatches(data.results ?? []);
+        setFrSearching(false);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setFrError(err instanceof Error ? err.message : "No se pudo completar la búsqueda facial.");
+        setFrSearching(false);
+      });
+    return () => { cancelled = true; };
+  }, [photo]);
+
+  useEffect(() => {
+    if (!photo) {
+      setFrDuplicate(null);
+      setFrDupDismissed(false);
+      return;
+    }
+    let cancelled = false;
+    setFrDupLoading(true);
+    setFrDuplicate(null);
+    setFrDupDismissed(false);
+    fetch("/api/fr/check-duplicate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ photo }),
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        if (cancelled) return;
+        if (data?.possible_duplicate && data.candidates?.length) {
+          setFrDuplicate(data);
+        }
+        setFrDupLoading(false);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setFrDupLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [photo]);
+
   const handleFile = useCallback(
     async (event: React.ChangeEvent<HTMLInputElement>) => {
       const file = event.target.files?.[0];
@@ -227,6 +332,10 @@ export default function MissingPersonForm({
         return;
       }
       setError(null);
+      setFrMatches([]);
+      setFrError(null);
+      setFrDuplicate(null);
+      setFrDupDismissed(false);
       setProcessing(true);
       try {
         setPhoto(await fileToResizedDataUrl(file));
@@ -455,6 +564,124 @@ export default function MissingPersonForm({
                 </span>
               </span>
             </button>
+            {(frSearching || frMatches.length > 0 || frError) && (
+              <div className="mt-3">
+                {frSearching && (
+                  <div className="flex items-center gap-2 rounded-xl border border-[var(--eborder)] bg-[var(--esurf2)] px-4 py-3 text-sm text-[var(--etext2)]">
+                    <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                      <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" className="opacity-25" />
+                      <path d="M4 12a8 8 0 018-8" stroke="currentColor" strokeWidth="3" strokeLinecap="round" className="opacity-75" />
+                    </svg>
+                    Buscando personas similares…
+                  </div>
+                )}
+                {frError && !frSearching && (
+                  <p className="text-xs text-[var(--etext2)]">{frError}</p>
+                )}
+                {frMatches.length > 0 && !frSearching && (
+                  <div className="flex flex-col gap-2">
+                    <p className="text-xs font-bold text-[var(--etext)]">
+                      <PeopleIcon className="mr-1 inline h-3.5 w-3.5 align-[-0.2em]" />
+                      {frMatches.length} {frMatches.length === 1 ? "posible coincidencia" : "posibles coincidencias"} encontrada{frMatches.length === 1 ? "" : "s"}
+                    </p>
+                    {frMatches.map((m) => (
+                      <a
+                        key={m.record_id}
+                        href={`#persona-${m.record_id}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-3 rounded-xl border border-[var(--eborder)] bg-white p-3 text-left transition hover:border-[var(--etext3)] hover:shadow-sm"
+                      >
+                        {m.image_url ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={m.image_url}
+                            alt={m.person_name || "Persona"}
+                            className="h-12 w-12 shrink-0 rounded-lg object-cover"
+                          />
+                        ) : (
+                          <span className="grid h-12 w-12 shrink-0 place-items-center rounded-lg bg-gray-100 text-[var(--etext2)]">
+                            <PeopleIcon className="h-5 w-5" />
+                          </span>
+                        )}
+                        <span className="flex min-w-0 flex-col gap-0.5">
+                          <span className="truncate text-sm font-bold text-[var(--etext)]">
+                            {m.person_name || "Sin nombre"}
+                          </span>
+                          <span className="text-xs text-[var(--etext2)]">
+                            {[m.age, m.last_seen_location].filter(Boolean).join(" · ") || "Datos no disponibles"}
+                          </span>
+                          <span className={`text-xs font-semibold ${
+                            m.band === "alta" ? "text-emerald-700" : m.band === "media" ? "text-amber-700" : "text-[var(--etext2)]"
+                          }`}>
+                            {Math.round(m.score * 100)}% similitud
+                          </span>
+                        </span>
+                      </a>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+            {frDuplicate?.possible_duplicate &&
+              frDuplicate.candidates?.length &&
+              !frDupDismissed && (
+                <div className="mt-3 rounded-xl border border-amber-300 bg-amber-50 p-4">
+                  <div className="mb-2 flex items-start justify-between gap-2">
+                    <p className="text-sm font-extrabold text-amber-800">
+                      <span aria-hidden>⚠</span> Posible duplicado detectado
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setFrDupDismissed(true)}
+                      className="shrink-0 text-amber-600 hover:text-amber-800"
+                      aria-label="Cerrar aviso"
+                    >
+                      ×
+                    </button>
+                  </div>
+                  <p className="mb-2 text-xs text-amber-900">
+                    Creemos que esta persona ya podría estar registrada. ¿Es la
+                    misma?
+                  </p>
+                  <div className="flex flex-col gap-2">
+                    {frDuplicate.candidates.map((c) => (
+                      <a
+                        key={c.record_id}
+                        href={`#persona-${c.record_id}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-3 rounded-lg border border-amber-200 bg-white p-2.5 text-left transition hover:border-amber-400 hover:shadow-sm"
+                      >
+                        {c.image_url ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={c.image_url}
+                            alt={c.person_name || "Persona"}
+                            className="h-10 w-10 shrink-0 rounded-lg object-cover"
+                          />
+                        ) : (
+                          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-amber-100 text-amber-600">
+                            <PeopleIcon className="h-4 w-4" />
+                          </span>
+                        )}
+                        <span className="flex min-w-0 flex-col gap-0.5">
+                          <span className="truncate text-sm font-bold text-[var(--etext)]">
+                            {c.person_name || "Sin nombre"}
+                          </span>
+                          <span className="text-xs text-[var(--etext2)]">
+                            {c.source} · {Math.round(c.score * 100)}%
+                            similitud
+                          </span>
+                        </span>
+                      </a>
+                    ))}
+                  </div>
+                  <p className="mt-2 text-[11px] text-amber-700">
+                    Puedes continuar con el registro si no es la misma persona.
+                  </p>
+                </div>
+              )}
           </div>
 
           <div className="e-report-modal__grid grid grid-cols-1 gap-3.5 sm:grid-cols-2">
