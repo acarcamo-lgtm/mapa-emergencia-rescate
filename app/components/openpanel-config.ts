@@ -1,0 +1,6 @@
+export const OPENPANEL_CLIENT_ID =
+  process.env.NEXT_PUBLIC_OPENPANEL_CLIENT_ID ||
+  "f2a52d1b-a875-4576-86e3-024006f45147";
+
+export const OPENPANEL_PRODUCTION_HOST =
+  process.env.NEXT_PUBLIC_OPENPANEL_PRODUCTION_HOST || "terremotovenezuela.app";

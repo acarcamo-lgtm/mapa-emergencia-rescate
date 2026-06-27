@@ -7,6 +7,7 @@ import PwaRegister from "./components/PwaRegister";
 import MourningRibbon from "./components/MourningRibbon";
 import StickyHelpButton from "./components/StickyHelpButton";
 import OpenPanelProduction from "./components/OpenPanelProduction";
+import { OPENPANEL_CLIENT_ID } from "./components/openpanel-config";
 import ThemeProvider from "./components/ThemeProvider";
 
 const stara = localFont({
@@ -66,7 +67,6 @@ const SITE_URL = "https://terremotovenezuela.app";
 const SITE_TITLE = "Mapa de Emergencia y Rescate · Terremoto en Venezuela";
 const SITE_DESC =
   "Reporte ciudadano en tiempo real para coordinar rescates, identificar daños estructurales y organizar la entrega de ayuda humanitaria tras el terremoto en Venezuela.";
-const OPENPANEL_CLIENT_ID = process.env.NEXT_PUBLIC_OPENPANEL_CLIENT_ID;
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),

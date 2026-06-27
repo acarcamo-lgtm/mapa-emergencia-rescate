@@ -8,11 +8,11 @@ import {
   type ReportType,
 } from "@/lib/types";
 import AdminLogin from "../components/AdminLogin";
+import { OPENPANEL_CLIENT_ID } from "../components/openpanel-config";
 import { formatDonationUsd } from "@/lib/donation-shared";
 
 const ADMIN_STORAGE_KEY = "emergency:adminToken";
 const POLL_INTERVAL_MS = 7000;
-const OPENPANEL_CLIENT_ID = process.env.NEXT_PUBLIC_OPENPANEL_CLIENT_ID;
 const OPENPANEL_DASHBOARD_URL = process.env.NEXT_PUBLIC_OPENPANEL_DASHBOARD_URL;
 const OPENPANEL_REALTIME_URL = OPENPANEL_DASHBOARD_URL
   ? `${OPENPANEL_DASHBOARD_URL.replace(/\/$/, "")}/realtime`
@@ -966,8 +966,9 @@ export default function AdminDashboard() {
               ) : (
                 <div className="p-6">
                   <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
-                    Configura `NEXT_PUBLIC_OPENPANEL_DASHBOARD_URL` en Vercel y
-                    vuelve a desplegar para mostrar el dashboard aquí.
+                    Configura `NEXT_PUBLIC_OPENPANEL_DASHBOARD_URL` en el
+                    entorno de despliegue y vuelve a desplegar para mostrar el
+                    dashboard aquí.
                   </div>
                 </div>
               )}

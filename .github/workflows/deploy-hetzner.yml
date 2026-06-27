@@ -125,6 +125,8 @@ jobs:
           build-args: |
             APP_BUILD_SHA=${{ github.sha }}
             NEXT_PUBLIC_ASSET_PREFIX=${{ secrets.NEXT_PUBLIC_ASSET_PREFIX }}
+            NEXT_PUBLIC_OPENPANEL_CLIENT_ID=${{ secrets.NEXT_PUBLIC_OPENPANEL_CLIENT_ID }}
+            NEXT_PUBLIC_OPENPANEL_PRODUCTION_HOST=${{ secrets.NEXT_PUBLIC_OPENPANEL_PRODUCTION_HOST }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 

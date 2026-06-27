@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { ArrowRight, HeartHandshake, Search } from "lucide-react";
 
 type Oferta = {
@@ -240,25 +240,22 @@ export default function OfertasList() {
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
 
   const categories = OFERTAS.map((group) => group.category);
-
-  const groups = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    return OFERTAS.filter(
-      (group) => !activeCategory || group.category === activeCategory,
-    )
-      .map((group) => ({
-        ...group,
-        items: q
-          ? group.items.filter(
-              (item) =>
-                item.name.toLowerCase().includes(q) ||
-                item.description.toLowerCase().includes(q) ||
-                group.category.toLowerCase().includes(q),
-            )
-          : group.items,
-      }))
-      .filter((group) => group.items.length > 0);
-  }, [query, activeCategory]);
+  const q = query.trim().toLowerCase();
+  const groups = OFERTAS.filter(
+    (group) => !activeCategory || group.category === activeCategory,
+  )
+    .map((group) => ({
+      ...group,
+      items: q
+        ? group.items.filter(
+            (item) =>
+              item.name.toLowerCase().includes(q) ||
+              item.description.toLowerCase().includes(q) ||
+              group.category.toLowerCase().includes(q),
+          )
+        : group.items,
+    }))
+    .filter((group) => group.items.length > 0);
 
   return (
     <div>

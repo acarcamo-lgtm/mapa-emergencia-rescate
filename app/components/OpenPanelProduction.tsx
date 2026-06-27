@@ -2,8 +2,7 @@
 
 import { OpenPanelComponent } from "@openpanel/nextjs";
 
-const PRODUCTION_HOST =
-  process.env.NEXT_PUBLIC_OPENPANEL_PRODUCTION_HOST ?? "terremotovenezuela.app";
+import { OPENPANEL_PRODUCTION_HOST } from "./openpanel-config";
 
 export default function OpenPanelProduction({
   clientId,
@@ -11,7 +10,7 @@ export default function OpenPanelProduction({
   clientId: string;
 }) {
   if (typeof window === "undefined") return null;
-  if (window.location.hostname !== PRODUCTION_HOST) return null;
+  if (window.location.hostname !== OPENPANEL_PRODUCTION_HOST) return null;
 
   return (
     <OpenPanelComponent

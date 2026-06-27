@@ -3,11 +3,11 @@
  * Extrae las fuentes Stara (OTF) embebidas en Terremoto Venezuela.html
  * hacia app/fonts/stara/. Ejecutar una vez si se actualiza el bundle de referencia.
  */
-const fs = require("fs");
-const zlib = require("zlib");
-const { promisify } = require("util");
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { promisify } from "node:util";
+import { gunzip as gunzipCallback } from "node:zlib";
 
-const gunzip = promisify(zlib.gunzip);
+const gunzip = promisify(gunzipCallback);
 
 const FONT_MAP = {
   "f543ef74-db33-4954-a64d-177f92725857": "Stara-Medium.otf",
@@ -23,14 +23,14 @@ const FONT_MAP = {
 async function main() {
   const htmlPath =
     process.argv[2] ?? "Terremoto Venezuela.html";
-  const html = fs.readFileSync(htmlPath, "utf8");
+  const html = readFileSync(htmlPath, "utf8");
   const mm = html.match(/<script type="__bundler\/manifest">([\s\S]*?)<\/script>/);
   if (!mm) {
     console.error("No se encontró manifest en", htmlPath);
     process.exit(1);
   }
   const man = JSON.parse(mm[1]);
-  fs.mkdirSync("app/fonts/stara", { recursive: true });
+  mkdirSync("app/fonts/stara", { recursive: true });
 
   for (const [uuid, name] of Object.entries(FONT_MAP)) {
     const entry = man[uuid];
@@ -41,7 +41,7 @@ async function main() {
     let buf = Buffer.from(entry.data, "base64");
     if (entry.compressed) buf = await gunzip(buf);
     const out = `app/fonts/stara/${name}`;
-    fs.writeFileSync(out, buf);
+    writeFileSync(out, buf);
     console.log("OK", out, buf.length, "bytes");
   }
 }
