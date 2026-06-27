@@ -90,12 +90,12 @@ export default function StickyHelpButton() {
           trackEvent("donation_fab_toggled", { open: !donateOpen });
         }}
         data-track="donation_fab_toggled"
-        className={`e-donate-fab-btn pointer-events-auto flex min-h-12 max-w-[calc(100vw-1.5rem)] items-center gap-2 rounded-full px-4 py-3 text-xs font-bold text-white shadow-lg transition hover:brightness-105 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-400 sm:max-w-none sm:text-sm ${
+        className={`e-donate-fab-btn pointer-events-auto flex h-12 w-12 min-h-12 max-w-[calc(100vw-1.5rem)] items-center justify-center gap-2 rounded-full px-0 py-3 text-xs font-bold text-white shadow-lg transition hover:brightness-105 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-400 sm:h-auto sm:w-auto sm:max-w-none sm:justify-start sm:px-4 sm:text-sm ${
           donateOpen ? "" : "animate-pulse-soft"
         }`}
       >
         <HandCoins aria-hidden className="h-4 w-4 shrink-0" strokeWidth={2.2} />
-        <span className="truncate">Apóyanos</span>
+        <span className="e-donate-fab-label hidden truncate sm:inline">Apóyanos</span>
       </button>
     </div>
   );

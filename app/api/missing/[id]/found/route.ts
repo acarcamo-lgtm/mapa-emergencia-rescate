@@ -7,6 +7,7 @@ import {
 } from "@/lib/missing";
 import { checkRateLimit, clientIp } from "@/lib/ratelimit";
 import { readJson, bodyErrorResponse, BODY_LIMIT_PHOTO } from "@/lib/body";
+import { invalidate } from "@/lib/cache";
 
 export const dynamic = "force-dynamic";
 
@@ -44,20 +45,14 @@ export async function POST(
     );
   }
 
-  const photo = typeof body.photo === "string" ? body.photo : null;
-  if (!photo) {
-    return NextResponse.json(
-      { error: "Adjunta una captura o foto como prueba del contacto." },
-      { status: 400 },
-    );
-  }
-  if (!isValidPhotoDataUrl(photo)) {
+  const photo = typeof body.photo === "string" && body.photo ? body.photo : null;
+  if (photo && !isValidPhotoDataUrl(photo)) {
     return NextResponse.json(
       { error: "La prueba debe ser una imagen JPG, PNG o WebP válida." },
       { status: 400 },
     );
   }
-  if (photo.length > MAX_PHOTO_CHARS) {
+  if (photo && photo.length > MAX_PHOTO_CHARS) {
     return NextResponse.json(
       { error: "La imagen es demasiado grande. Usa una más liviana." },
       { status: 413 },
@@ -72,6 +67,7 @@ export async function POST(
         { status: 404 },
       );
     }
+    invalidate();
     return NextResponse.json({ person });
   } catch {
     // No exponemos err.message al cliente (puede filtrar detalles internos).

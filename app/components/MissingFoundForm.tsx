@@ -2,6 +2,7 @@
 
 import { useCallback, useRef, useState } from "react";
 import { trackEvent } from "./openpanel";
+import { LOCALIZED_HOSPITAL_OPTIONS } from "./personReportOptions";
 
 export interface MissingFoundPayload {
   note: string;
@@ -14,8 +15,12 @@ interface Props {
   onSubmit: (payload: MissingFoundPayload) => Promise<void>;
 }
 
+type PersonStatus = "safe" | "deceased";
+type FoundPlace = "hospital" | "street";
+
 const MAX_DIM = 960;
 const JPEG_QUALITY = 0.62;
+const MAX_CONFIRMATION_CHARS = 420;
 
 async function fileToResizedDataUrl(file: File): Promise<string> {
   const bitmap = await createImageBitmap(file);
@@ -37,11 +42,65 @@ async function fileToResizedDataUrl(file: File): Promise<string> {
   return canvas.toDataURL("image/jpeg", JPEG_QUALITY);
 }
 
+function HospitalIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      aria-hidden
+    >
+      <rect x="3" y="3" width="18" height="18" rx="2" />
+      <path d="M9 3v18M3 9h18" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function StreetIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      aria-hidden
+    >
+      <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+      <path d="M9 22V12h6v10" />
+    </svg>
+  );
+}
+
+function buildResolutionNote(
+  personStatus: PersonStatus,
+  foundPlace: FoundPlace,
+  foundLocation: string,
+  note: string,
+): string {
+  const statusText = personStatus === "safe" ? "A salvo" : "Fallecido/a";
+  const placeText =
+    foundPlace === "hospital"
+      ? `Hospital: ${foundLocation.trim()}`
+      : `Calle o zona: ${foundLocation.trim()}`;
+
+  return [
+    `Estado final: ${statusText}.`,
+    `Dónde fue encontrada: ${placeText}.`,
+    `Confirmación: ${note.trim()}`,
+  ].join("\n");
+}
+
 export default function MissingFoundForm({
   personName,
   onCancel,
   onSubmit,
 }: Props) {
+  const [personStatus, setPersonStatus] = useState<PersonStatus | null>(null);
+  const [foundPlace, setFoundPlace] = useState<FoundPlace | null>(null);
+  const [foundLocation, setFoundLocation] = useState("");
   const [note, setNote] = useState("");
   const [photo, setPhoto] = useState<string | null>(null);
   const [processing, setProcessing] = useState(false);
@@ -74,28 +133,50 @@ export default function MissingFoundForm({
     async (event: React.FormEvent) => {
       event.preventDefault();
       setError(null);
+      if (!personStatus) {
+        setError("Indica el estado final de la persona.");
+        return;
+      }
+      if (!foundPlace) {
+        setError("Indica dónde fue encontrada.");
+        return;
+      }
+      if (!foundLocation.trim()) {
+        setError(
+          foundPlace === "hospital"
+            ? "Selecciona el hospital."
+            : "Indica la calle o referencia.",
+        );
+        return;
+      }
       if (!note.trim()) {
         setError(
           "Cuéntanos cómo te comunicaste con la persona o quién lo confirmó.",
         );
         return;
       }
-      if (!photo) {
-        setError("Adjunta una captura o foto como prueba del contacto.");
-        return;
-      }
       setSubmitting(true);
       try {
-        await onSubmit({ note: note.trim(), photo });
+        await onSubmit({
+          note: buildResolutionNote(
+            personStatus,
+            foundPlace,
+            foundLocation,
+            note,
+          ),
+          photo,
+        });
         trackEvent("missing_person_marked_found", {
-          hasPhoto: true,
+          foundPlace,
+          personStatus,
+          hasPhoto: Boolean(photo),
         });
       } catch (err) {
         setError(err instanceof Error ? err.message : "No se pudo guardar.");
         setSubmitting(false);
       }
     },
-    [note, photo, onSubmit],
+    [foundLocation, foundPlace, note, onSubmit, personStatus, photo],
   );
 
   return (
@@ -104,15 +185,21 @@ export default function MissingFoundForm({
       aria-modal="true"
       aria-labelledby="found-title"
       onClick={onCancel}
-      className="fixed inset-0 z-[2100] flex items-end justify-center bg-slate-900/60 p-0 sm:items-center sm:p-4"
+      className="fixed inset-0 z-[2100] flex items-start justify-center overflow-y-auto bg-black/70 p-4 sm:p-6"
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="max-h-[92vh] w-full max-w-md overflow-y-auto rounded-t-2xl bg-white p-5 shadow-xl sm:rounded-2xl sm:p-6"
+        className="my-auto max-h-[calc(100vh-2rem)] w-full max-w-[500px] overflow-y-auto rounded-2xl bg-white p-7 shadow-2xl"
       >
         <div className="flex items-start justify-between gap-3">
-          <h3 id="found-title" className="text-lg font-bold text-slate-900">
-            ✓ Marcar como encontrada
+          <h3
+            id="found-title"
+            className="flex items-center gap-2 font-[family-name:var(--qi-font-display)] text-[22px] font-semibold leading-tight text-[var(--etext)]"
+          >
+            <span className="text-emerald-600" aria-hidden>
+              ✓
+            </span>
+            Marcar como localizada
           </h3>
           <button
             type="button"
@@ -124,17 +211,119 @@ export default function MissingFoundForm({
             ×
           </button>
         </div>
-        <p className="mt-1 text-sm text-slate-600">
-          Antes de quitar a <strong>{personName}</strong> del listado,
-          ayúdanos a confirmar el contacto con una breve explicación. Esto
-          previene cierres falsos.
+        <p className="mt-2 text-sm leading-relaxed text-[var(--etext2)]">
+          Antes de quitar a <strong className="text-[var(--etext)]">{personName}</strong>{" "}
+          del listado, ayúdanos a confirmar el contacto con una breve explicación.
+          Esto previene cierres falsos.
         </p>
 
-        <form onSubmit={handleSubmit} className="mt-4 space-y-4">
+        <form onSubmit={handleSubmit} className="mt-5 flex flex-col gap-[18px]">
+          <fieldset className="border-0 p-0">
+            <legend className="mb-2 block text-[13px] font-semibold text-[var(--etext)]">
+              ¿Cuál es el estado final de la persona?
+            </legend>
+            <div className="grid grid-cols-2 gap-2.5">
+              <button
+                type="button"
+                onClick={() => setPersonStatus("safe")}
+                aria-pressed={personStatus === "safe"}
+                className={`flex items-center justify-center gap-2 rounded-[10px] border-[1.5px] px-3 py-3 text-sm font-bold transition ${
+                  personStatus === "safe"
+                    ? "border-emerald-600 bg-emerald-600 text-white"
+                    : "border-[var(--eborder)] bg-white text-[var(--etext)]"
+                }`}
+              >
+                <span className="h-2.5 w-2.5 rounded-full bg-[#4ade80]" />
+                A salvo
+              </button>
+              <button
+                type="button"
+                onClick={() => setPersonStatus("deceased")}
+                aria-pressed={personStatus === "deceased"}
+                className={`flex items-center justify-center gap-2 rounded-[10px] border-[1.5px] px-3 py-3 text-sm font-bold transition ${
+                  personStatus === "deceased"
+                    ? "border-red-700 bg-red-700 text-white"
+                    : "border-[var(--eborder)] bg-white text-[var(--etext)]"
+                }`}
+              >
+                <span className="h-2.5 w-2.5 rounded-full bg-red-300" />
+                Fallecido/a
+              </button>
+            </div>
+          </fieldset>
+
+          <fieldset className="border-0 p-0">
+            <legend className="mb-2 block text-[13px] font-semibold text-[var(--etext)]">
+              ¿Dónde fue encontrada?
+            </legend>
+            <div className="mb-2.5 grid grid-cols-2 gap-2.5">
+              <button
+                type="button"
+                onClick={() => {
+                  setFoundPlace("hospital");
+                  setFoundLocation("");
+                }}
+                aria-pressed={foundPlace === "hospital"}
+                className={`flex items-center justify-center gap-1.5 rounded-[10px] border-[1.5px] px-3 py-3 text-[13px] font-bold transition ${
+                  foundPlace === "hospital"
+                    ? "border-[#c41a1a] bg-[#c41a1a] text-white"
+                    : "border-[var(--eborder)] bg-white text-[var(--etext)]"
+                }`}
+              >
+                <HospitalIcon className="h-3.5 w-3.5 shrink-0" />
+                En un hospital
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setFoundPlace("street");
+                  setFoundLocation("");
+                }}
+                aria-pressed={foundPlace === "street"}
+                className={`flex items-center justify-center gap-1.5 rounded-[10px] border-[1.5px] px-3 py-3 text-[13px] font-bold transition ${
+                  foundPlace === "street"
+                    ? "border-[#c41a1a] bg-[#c41a1a] text-white"
+                    : "border-[var(--eborder)] bg-white text-[var(--etext)]"
+                }`}
+              >
+                <StreetIcon className="h-3.5 w-3.5 shrink-0" />
+                En la calle
+              </button>
+            </div>
+
+            {foundPlace === "hospital" && (
+              <select
+                value={foundLocation}
+                onChange={(e) => setFoundLocation(e.target.value)}
+                className="e-input"
+                aria-label="Seleccionar hospital"
+              >
+                <option value="">Seleccionar hospital...</option>
+                {LOCALIZED_HOSPITAL_OPTIONS.map((hospital) => (
+                  <option key={hospital.value} value={hospital.value}>
+                    {hospital.label}
+                  </option>
+                ))}
+              </select>
+            )}
+
+            {foundPlace === "street" && (
+              <input
+                type="text"
+                value={foundLocation}
+                onChange={(e) => setFoundLocation(e.target.value)}
+                maxLength={160}
+                placeholder="Ej. Av. Principal de Catia, frente a la Plaza Bolivar..."
+                className="e-input"
+                aria-label="Referencia en la calle"
+              />
+            )}
+          </fieldset>
+
           <div>
             <label
               htmlFor="found-note"
-              className="block text-sm font-medium text-slate-700"
+              className="mb-1.5 block text-[13px] font-semibold text-[var(--etext)]"
             >
               ¿Cómo te comunicaste o quién lo confirmó?{" "}
               <span className="text-red-600">*</span>
@@ -144,18 +333,17 @@ export default function MissingFoundForm({
               value={note}
               onChange={(e) => setNote(e.target.value)}
               rows={4}
-              maxLength={600}
+              maxLength={MAX_CONFIRMATION_CHARS}
               required
               placeholder="Ej: Hablé por teléfono con su hermana, está en el refugio de Chacao. O: lo vi en persona en el centro médico."
-              className="mt-1 w-full resize-none rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-900"
+              className="e-input min-h-[100px] resize-none"
             />
           </div>
 
           <div>
-            <label htmlFor="found-photo" className="block text-sm font-medium text-slate-700">
-              Prueba: captura de pantalla o foto{" "}
-              <span className="text-red-600">*</span>
-            </label>
+            <div className="mb-2 block text-[13px] font-semibold text-[var(--etext)]">
+              Prueba (opcional): captura de pantalla o foto
+            </div>
             <input
               id="found-photo"
               ref={fileRef}
@@ -163,18 +351,17 @@ export default function MissingFoundForm({
               accept="image/*"
               onChange={handleFile}
               className="hidden"
-              required
             />
-            <div className="mt-1 flex items-center gap-3">
+            <div className="flex items-center gap-3">
               {photo ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
                   src={photo}
                   alt="Vista previa"
-                  className="h-20 w-20 rounded-lg object-cover ring-1 ring-slate-200"
+                  className="h-[72px] w-[72px] rounded-[10px] object-cover ring-1 ring-slate-200"
                 />
               ) : (
-                <div className="grid h-20 w-20 place-items-center rounded-lg bg-slate-100 text-2xl text-slate-400">
+                <div className="grid h-[72px] w-[72px] shrink-0 place-items-center rounded-[10px] border-[1.5px] border-[var(--eborder)] bg-[var(--einput)] text-2xl text-slate-400">
                   📎
                 </div>
               )}
@@ -183,10 +370,10 @@ export default function MissingFoundForm({
                   type="button"
                   onClick={() => fileRef.current?.click()}
                   disabled={processing}
-                  className="rounded-lg border border-slate-300 px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                  className="rounded-lg border-[1.5px] border-[var(--eborder)] bg-white px-4 py-2 text-sm font-semibold text-[var(--etext)] hover:bg-[var(--einput)] disabled:opacity-50"
                 >
                   {processing
-                    ? "Procesando…"
+                    ? "Procesando..."
                     : photo
                       ? "Cambiar"
                       : "Adjuntar captura"}
@@ -203,7 +390,7 @@ export default function MissingFoundForm({
                     Quitar
                   </button>
                 )}
-                <p className="text-[11px] text-slate-500">
+                <p className="text-xs text-[var(--etext3)]">
                   Ej: pantallazo de WhatsApp, foto con la persona, etc.
                 </p>
               </div>
@@ -216,20 +403,20 @@ export default function MissingFoundForm({
             </p>
           )}
 
-          <div className="flex justify-end gap-2 pt-1">
+          <div className="flex justify-end gap-3 pt-1">
             <button
               type="button"
               onClick={onCancel}
-              className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+              className="rounded-[10px] border-[1.5px] border-[var(--eborder)] bg-white px-5 py-3 text-sm font-semibold text-[var(--etext)] hover:bg-[var(--einput)]"
             >
               Cancelar
             </button>
             <button
               type="submit"
-              disabled={submitting || processing || !photo}
-              className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+              disabled={submitting || processing}
+              className="rounded-[10px] bg-emerald-600 px-5 py-3 text-sm font-bold text-white hover:bg-emerald-700 disabled:opacity-50"
             >
-              {submitting ? "Enviando…" : "Confirmar"}
+              {submitting ? "Enviando..." : "Confirmar"}
             </button>
           </div>
         </form>

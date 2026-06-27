@@ -51,8 +51,18 @@ function HeroAccessCard({
 }
 
 export default function HeroSection() {
-  const goMap = useCallback(() => scrollToSection("mapa"), []);
   const goMissing = useCallback(() => scrollToSection("e-directory"), []);
+  const goReportPeople = useCallback(() => {
+    if (window.location.hash === "#reportar-personas") {
+      window.dispatchEvent(
+        new CustomEvent("missing-person-report:open", {
+          detail: { reportType: "found" },
+        }),
+      );
+      return;
+    }
+    window.location.hash = "reportar-personas";
+  }, []);
   const goHelp = useCallback(() => scrollToSection("tutorial"), []);
   const goVolunteer = useCallback(() => scrollToSection("equipo"), []);
 
@@ -114,7 +124,7 @@ export default function HeroSection() {
               emoji="📢"
               title="Reportar Personas"
               description="Encontré a alguien y quiero reportarlo."
-              onClick={goMap}
+              onClick={goReportPeople}
             />
             <HeroAccessCard
               emoji="🆘"

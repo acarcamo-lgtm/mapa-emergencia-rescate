@@ -1,111 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
-
-interface CollectionCenter {
-  id: string;
-  organization: string;
-  state: string;
-  municipality?: string;
-  parish?: string;
-  address: string;
-  items: string[];
-  schedule?: string;
-  phones?: string[];
-  source: string;
-}
-
-const CENTERS: CollectionCenter[] = [
-  {
-    id: "farmapaz",
-    organization: "Farmapaz",
-    state: "Nacional",
-    address: "En todas las sucursales Farmapaz",
-    items: ["Ropa", "Alimentos no perecederos", "Insumos para bebés"],
-    source: "Farmapaz — Unidos por Venezuela",
-  },
-  {
-    id: "operacion-boqueron",
-    organization: "Operación Todos con VZLA",
-    state: "Monagas",
-    municipality: "Maturín",
-    parish: "Boquerón",
-    address:
-      "Av. principal de Boquerón, frente a la panadería Escorpión Pan",
-    items: [
-      "Agua potable",
-      "Alimentos no perecederos",
-      "Insumos médicos",
-      "Ropa y abrigos",
-    ],
-    source: "Operación Todos con VZLA",
-  },
-  {
-    id: "operacion-vente-monagas",
-    organization: "Operación Todos con VZLA — Sede Vente Monagas",
-    state: "Monagas",
-    municipality: "Maturín",
-    address:
-      "Calle Carvajal, casa N.º 90, sector La Manga. Diagonal a Perozo Motors",
-    items: [
-      "Agua potable",
-      "Alimentos no perecederos",
-      "Insumos médicos",
-      "Ropa y abrigos",
-    ],
-    source: "Operación Todos con VZLA",
-  },
-  {
-    id: "operacion-la-pica",
-    organization: "Operación Todos con VZLA",
-    state: "Monagas",
-    municipality: "Maturín",
-    parish: "La Pica",
-    address:
-      "Av. Principal La Pica, casa de la Sra. Irma, frente a la licorería",
-    items: [
-      "Agua potable",
-      "Alimentos no perecederos",
-      "Insumos médicos",
-      "Ropa y abrigos",
-    ],
-    source: "Operación Todos con VZLA",
-  },
-  {
-    id: "operacion-san-simon",
-    organization: "Operación Todos con VZLA",
-    state: "Monagas",
-    municipality: "Maturín",
-    parish: "San Simón",
-    address:
-      "Calle Chimborazo Sur, a 100 m de la parada de los 26",
-    items: [
-      "Agua potable",
-      "Alimentos no perecederos",
-      "Insumos médicos",
-      "Ropa y abrigos",
-    ],
-    source: "Operación Todos con VZLA",
-  },
-  {
-    id: "udo-los-guaritos",
-    organization:
-      "Estudiantes de la Universidad de Oriente — Núcleo Monagas",
-    state: "Monagas",
-    municipality: "Maturín",
-    address: "Entrada de la UDO Monagas, Campus Los Guaritos",
-    schedule: "Lunes a viernes, 9:00 a.m. a 12:00 p.m.",
-    phones: ["0412-0984394", "0424-9068784", "0424-9570080"],
-    items: [
-      "Agua potable",
-      "Alimentos no perecederos y enlatados",
-      "Medicamentos básicos y de primeros auxilios",
-      "Productos de higiene personal",
-      "Ropa y zapatos en buen estado",
-    ],
-    source: "UDO Monagas / AIPA / Fundación Lirio Mayero",
-  },
-];
+import { useEffect, useMemo, useState } from "react";
+import type { CollectionCenter } from "@/lib/collection-centers-meta";
 
 function telHref(display: string): string {
   const cleaned = display.replace(/[^\d+]/g, "");
@@ -130,11 +26,38 @@ function locationLabel(center: CollectionCenter): string {
 
 export default function CollectionCenters() {
   const [query, setQuery] = useState("");
+  const [centers, setCenters] = useState<CollectionCenter[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/collection-centers", { cache: "no-store" })
+      .then((res) =>
+        res.ok
+          ? res.json()
+          : Promise.reject(new Error("No se pudieron cargar los centros.")),
+      )
+      .then((data: { centers?: CollectionCenter[] }) => {
+        if (!cancelled) setCenters(data.centers ?? []);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setError("No se pudieron cargar los centros de acopio.");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const filtered = useMemo(() => {
     const q = normalize(query);
-    if (!q) return CENTERS;
-    return CENTERS.filter((center) => {
+    if (!q) return centers;
+    return centers.filter((center) => {
       const haystack = normalize(
         [
           center.organization,
@@ -150,7 +73,7 @@ export default function CollectionCenters() {
       );
       return haystack.includes(q);
     });
-  }, [query]);
+  }, [centers, query]);
 
   return (
     <section
@@ -164,7 +87,7 @@ export default function CollectionCenters() {
               <h1 className="flex flex-wrap items-center gap-2 text-lg font-bold text-slate-900 sm:text-xl">
                 🟢 Centros de acopio
                 <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-800">
-                  {CENTERS.length} puntos
+                  {centers.length} puntos
                 </span>
               </h1>
               <p className="mt-1 max-w-3xl text-sm text-slate-600">
@@ -199,7 +122,15 @@ export default function CollectionCenters() {
               />
             </div>
 
-            {filtered.length === 0 ? (
+            {loading ? (
+              <p className="rounded-lg bg-slate-50 px-3 py-6 text-center text-sm text-slate-500">
+                Cargando centros de acopio…
+              </p>
+            ) : error ? (
+              <p className="rounded-lg bg-red-50 px-3 py-6 text-center text-sm text-red-700">
+                {error}
+              </p>
+            ) : filtered.length === 0 ? (
               <p className="rounded-lg bg-slate-50 px-3 py-6 text-center text-sm text-slate-500">
                 No encontramos centros para{" "}
                 <span className="font-semibold text-slate-700">“{query}”</span>.

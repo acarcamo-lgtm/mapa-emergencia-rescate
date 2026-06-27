@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { ArrowRight, HeartHandshake, Search } from "lucide-react";
 
 type Oferta = {
@@ -20,19 +20,19 @@ const OFERTAS: { category: string; items: Oferta[] }[] = [
         logo: "/logos/cruz-roja-ve.jpeg",
         description: "Atención médica, rescate y ayuda humanitaria en Venezuela.",
         action: "Donar",
-        url: "#",
+        url: "https://cruzrojavenezolana.org",
       },
       {
         name: "Banco de Alimentos Venezuela",
         description: "Distribución de alimentos a familias en situación de vulnerabilidad.",
         action: "Donar",
-        url: "#",
+        url: "https://bancoalimentosvenezuela.org",
       },
       {
         name: "FUNDALATIN",
         description: "Apoyo a comunidades vulnerables y coordinación de refugios.",
         action: "Donar",
-        url: "#",
+        url: "https://fundalatin.org",
       },
       {
         name: "Cáritas de Venezuela",
@@ -173,6 +173,8 @@ const OFERTAS: { category: string; items: Oferta[] }[] = [
   },
 ];
 
+const CATEGORIES = OFERTAS.map((group) => group.category);
+
 function OfertaCard({ name, logo, description, action, url }: Oferta) {
   return (
     <a
@@ -239,26 +241,22 @@ export default function OfertasList() {
   const [query, setQuery] = useState("");
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
 
-  const categories = OFERTAS.map((group) => group.category);
-
-  const groups = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    return OFERTAS.filter(
-      (group) => !activeCategory || group.category === activeCategory,
-    )
-      .map((group) => ({
-        ...group,
-        items: q
-          ? group.items.filter(
-              (item) =>
-                item.name.toLowerCase().includes(q) ||
-                item.description.toLowerCase().includes(q) ||
-                group.category.toLowerCase().includes(q),
-            )
-          : group.items,
-      }))
-      .filter((group) => group.items.length > 0);
-  }, [query, activeCategory]);
+  const q = query.trim().toLowerCase();
+  const groups = OFERTAS.filter(
+    (group) => !activeCategory || group.category === activeCategory,
+  )
+    .map((group) => ({
+      ...group,
+      items: q
+        ? group.items.filter(
+            (item) =>
+              item.name.toLowerCase().includes(q) ||
+              item.description.toLowerCase().includes(q) ||
+              group.category.toLowerCase().includes(q),
+          )
+        : group.items,
+    }))
+    .filter((group) => group.items.length > 0);
 
   return (
     <div>
@@ -269,7 +267,7 @@ export default function OfertasList() {
             active={activeCategory === null}
             onClick={() => setActiveCategory(null)}
           />
-          {categories.map((category) => (
+          {CATEGORIES.map((category) => (
             <FilterPill
               key={category}
               label={category}

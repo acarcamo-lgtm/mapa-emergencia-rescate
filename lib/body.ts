@@ -75,6 +75,7 @@ export function bodyErrorResponse(e: unknown): NextResponse {
 
 /** Topes por tipo de endpoint (en bytes). */
 export const BODY_LIMIT_PHOTO = 2_000_000; // acepta foto en base64 (~1.4 MB) + campos
+export const BODY_LIMIT_BULK_TEXT = 128_000; // importaciones admin de texto/CSV
 export const BODY_LIMIT_TEXT = 16_000; // formularios de solo texto
 export const BODY_LIMIT_SMALL = 4_000; // login, donaciones
 export const BODY_LIMIT_PROXY = 32_000; // eventos de analítica (op proxy)

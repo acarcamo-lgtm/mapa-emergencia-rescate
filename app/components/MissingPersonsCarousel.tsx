@@ -12,7 +12,9 @@ import {
   type ReactNode,
 } from "react";
 import MissingPersonForm, {
+  type FoundPlace,
   type MissingPersonPayload,
+  type MissingReportType,
 } from "./MissingPersonForm";
 import MissingPersonDetail from "./MissingPersonDetail";
 import { useLowBandwidthMode } from "./useLowBandwidthMode";
@@ -46,6 +48,11 @@ interface MissingPerson {
 }
 
 type DirectoryTab = "personas" | "hospitales";
+
+type ReportFormDefaults = {
+  reportType: MissingReportType;
+  foundPlace: FoundPlace | null;
+};
 
 type PersonasPreviewHandle = {
   refresh: () => void;
@@ -101,6 +108,7 @@ function tabFromHash(hash: string): DirectoryTab | null {
   ) {
     return "personas";
   }
+  if (id === "reportar-personas") return "personas";
   return null;
 }
 
@@ -191,6 +199,10 @@ function HorizontalScrollRow({
 export default function MissingPersonsCarousel() {
   const [activeTab, setActiveTab] = useState<DirectoryTab>("personas");
   const [showForm, setShowForm] = useState(false);
+  const [formDefaults, setFormDefaults] = useState<ReportFormDefaults>({
+    reportType: "missing",
+    foundPlace: null,
+  });
   const [formSessionKey, setFormSessionKey] = useState(0);
   const personasRef = useRef<PersonasPreviewHandle>(null);
 
@@ -199,10 +211,18 @@ export default function MissingPersonsCarousel() {
     window.history.replaceState(null, "", hashForTab(tab));
   }, []);
 
-  const openReportForm = useCallback(() => {
+  const openFormWithDefaults = useCallback((defaults: ReportFormDefaults) => {
+    setFormDefaults(defaults);
     setFormSessionKey((k) => k + 1);
     setShowForm(true);
   }, []);
+
+  const openReportForm = useCallback(() => {
+    openFormWithDefaults({
+      reportType: activeTab === "hospitales" ? "found" : "missing",
+      foundPlace: activeTab === "hospitales" ? "hospital" : null,
+    });
+  }, [activeTab, openFormWithDefaults]);
 
   const handleFormSubmit = useCallback(
     async (payload: MissingPersonPayload) => {
@@ -225,13 +245,38 @@ export default function MissingPersonsCarousel() {
 
   useEffect(() => {
     const syncFromHash = () => {
+      if (window.location.hash === "#reportar-personas") {
+        setActiveTab("personas");
+        openFormWithDefaults({ reportType: "found", foundPlace: null });
+        return;
+      }
       const next = tabFromHash(window.location.hash);
       if (next) setActiveTab(next);
     };
     syncFromHash();
     window.addEventListener("hashchange", syncFromHash);
     return () => window.removeEventListener("hashchange", syncFromHash);
-  }, []);
+  }, [openFormWithDefaults]);
+
+  useEffect(() => {
+    const openFromEvent = (event: Event) => {
+      const detail =
+        event instanceof CustomEvent
+          ? (event.detail as Partial<ReportFormDefaults>)
+          : {};
+      setActiveTab("personas");
+      openFormWithDefaults({
+        reportType: detail.reportType === "missing" ? "missing" : "found",
+        foundPlace:
+          detail.foundPlace === "hospital" || detail.foundPlace === "street"
+            ? detail.foundPlace
+            : null,
+      });
+    };
+    window.addEventListener("missing-person-report:open", openFromEvent);
+    return () =>
+      window.removeEventListener("missing-person-report:open", openFromEvent);
+  }, [openFormWithDefaults]);
 
   return (
     <section
@@ -249,11 +294,11 @@ export default function MissingPersonsCarousel() {
         aria-hidden
       />
       <div className="mx-auto w-full max-w-[1120px] px-4 py-8 sm:px-6 sm:py-10">
-        <div className="-mx-4 mb-7 flex flex-wrap items-end justify-between gap-3 border-b-2 border-[var(--eborder)] px-4 sm:mx-0 sm:px-0">
+        <div className="e-directory-tabs-bar -mx-4 mb-7 flex flex-col items-stretch justify-between gap-3 border-b-2 border-[var(--eborder)] px-4 pb-3 sm:mx-0 sm:flex-row sm:items-end sm:px-0 sm:pb-0">
           <div
             role="tablist"
             aria-label="Directorio de personas y hospitales"
-            className="flex min-w-0 flex-1"
+            className="e-directory-tablist grid min-w-0 grid-cols-2 sm:flex sm:flex-1"
           >
             <button
               type="button"
@@ -263,7 +308,7 @@ export default function MissingPersonsCarousel() {
               aria-controls="panel-personas"
               data-active={activeTab === "personas"}
               onClick={() => selectTab("personas")}
-              className="e-tab-label flex flex-1 items-center justify-center sm:flex-none"
+              className="e-tab-label flex min-w-0 flex-1 items-center justify-center whitespace-nowrap sm:flex-none"
             >
               Personas
             </button>
@@ -275,7 +320,7 @@ export default function MissingPersonsCarousel() {
               aria-controls="panel-hospitales"
               data-active={activeTab === "hospitales"}
               onClick={() => selectTab("hospitales")}
-              className="e-tab-label flex flex-1 items-center justify-center sm:flex-none"
+              className="e-tab-label flex min-w-0 flex-1 items-center justify-center whitespace-nowrap sm:flex-none"
             >
               Hospitales
             </button>
@@ -283,7 +328,7 @@ export default function MissingPersonsCarousel() {
           <button
             type="button"
             onClick={openReportForm}
-            className="e-btn e-btn-primary mb-1 shrink-0 px-5 py-2.5"
+            className="e-directory-report-btn e-btn e-btn-primary mb-0 w-full shrink-0 whitespace-nowrap px-5 py-2.5 sm:mb-1 sm:w-auto"
           >
             <span aria-hidden>＋</span> Quiero reportar
           </button>
@@ -309,13 +354,9 @@ export default function MissingPersonsCarousel() {
 
         {showForm && (
           <MissingPersonForm
-            key={`${activeTab}-${formSessionKey}`}
-            initialReportType={
-              activeTab === "hospitales" ? "found" : "missing"
-            }
-            initialFoundPlace={
-              activeTab === "hospitales" ? "hospital" : null
-            }
+            key={`${formDefaults.reportType}-${formDefaults.foundPlace ?? "none"}-${formSessionKey}`}
+            initialReportType={formDefaults.reportType}
+            initialFoundPlace={formDefaults.foundPlace}
             onCancel={() => setShowForm(false)}
             onSubmit={handleFormSubmit}
           />

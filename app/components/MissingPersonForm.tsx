@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { trackEvent } from "./openpanel";
+import { REPORT_HOSPITAL_OPTIONS } from "./personReportOptions";
 
 export type MissingReportType = "missing" | "found";
 export type FoundPlace = "hospital" | "street";
@@ -389,15 +390,20 @@ export default function MissingPersonForm({
             <div className="e-report-modal__type-grid grid grid-cols-2 gap-2.5">
               <button
                 type="button"
-                onClick={() => setReportType("missing")}
+                onClick={() => {
+                  setReportType("missing");
+                  setFoundPlace(null);
+                  setPersonStatus(null);
+                  setLocation("");
+                }}
                 aria-pressed={isMissing}
-                className={`e-report-modal__type-btn flex flex-col items-start gap-1 rounded-xl border-[1.5px] p-3.5 text-left transition ${
+                className={`e-report-modal__type-btn flex flex-col items-center gap-2.5 rounded-[14px] border-2 px-3.5 py-5 text-center transition ${
                   isMissing
                     ? "is-active border-[#c41a1a] bg-[#c41a1a] text-white"
                     : "border-[var(--eborder)] bg-white text-[var(--etext)] hover:border-[var(--etext3)]"
                 }`}
               >
-                <SearchIcon className="e-report-modal__type-icon h-5 w-5" />
+                <SearchIcon className="e-report-modal__type-icon h-7 w-7" />
                 <span className="text-sm font-extrabold">
                   Persona desaparecida
                 </span>
@@ -409,15 +415,19 @@ export default function MissingPersonForm({
               </button>
               <button
                 type="button"
-                onClick={() => setReportType("found")}
+                onClick={() => {
+                  setReportType("found");
+                  setFoundPlace(null);
+                  setLocation("");
+                }}
                 aria-pressed={!isMissing}
-                className={`e-report-modal__type-btn flex flex-col items-start gap-1 rounded-xl border-[1.5px] p-3.5 text-left transition ${
+                className={`e-report-modal__type-btn flex flex-col items-center gap-2.5 rounded-[14px] border-2 px-3.5 py-5 text-center transition ${
                   !isMissing
                     ? "is-active is-found border-[#2b51f0] bg-[#2b51f0] text-white"
                     : "border-[var(--eborder)] bg-white text-[var(--etext)] hover:border-[var(--etext3)]"
                 }`}
               >
-                <PinIcon className="e-report-modal__type-icon h-5 w-5" />
+                <PinIcon className="e-report-modal__type-icon h-7 w-7" />
                 <span className="text-sm font-extrabold">
                   Persona encontrada
                 </span>
@@ -474,7 +484,7 @@ export default function MissingPersonForm({
             </button>
           </div>
 
-          <div className="e-report-modal__grid grid grid-cols-1 gap-3.5 sm:grid-cols-2">
+          <div className="e-report-modal__grid grid gap-3.5">
             <div>
               <label htmlFor="report-name" className="e-report-modal__label mb-1.5 block text-[13px] font-bold text-[var(--etext)]">
                 Nombre y apellido <span className="text-red-600">*</span>
@@ -529,7 +539,7 @@ export default function MissingPersonForm({
           </div>
 
           {isMissing ? (
-            <div className="e-report-modal__grid grid grid-cols-1 gap-3.5 sm:grid-cols-2">
+            <div className="e-report-modal__grid grid gap-3.5">
               <div>
                 <label htmlFor="report-location" className="e-report-modal__label mb-1.5 block text-[13px] font-bold text-[var(--etext)]">
                   Última ubicación vista{" "}
@@ -569,11 +579,14 @@ export default function MissingPersonForm({
                 <div className="grid grid-cols-2 gap-2.5">
                   <button
                     type="button"
-                    onClick={() => setFoundPlace("hospital")}
+                    onClick={() => {
+                      setFoundPlace("hospital");
+                      setLocation("");
+                    }}
                     aria-pressed={foundPlace === "hospital"}
-                    className={`flex items-center gap-2 rounded-xl border-[1.5px] px-3 py-2.5 text-left text-sm font-semibold transition ${
+                    className={`flex items-center justify-center gap-2 rounded-[10px] border-[1.5px] px-3 py-3 text-sm font-bold transition ${
                       foundPlace === "hospital"
-                        ? "border-[#2b51f0] bg-[#eef3ff] text-[#2b51f0]"
+                        ? "border-[#c41a1a] bg-[#c41a1a] text-white"
                         : "border-[var(--eborder)] bg-white text-[var(--etext)]"
                     }`}
                   >
@@ -582,11 +595,14 @@ export default function MissingPersonForm({
                   </button>
                   <button
                     type="button"
-                    onClick={() => setFoundPlace("street")}
+                    onClick={() => {
+                      setFoundPlace("street");
+                      setLocation("");
+                    }}
                     aria-pressed={foundPlace === "street"}
-                    className={`flex items-center gap-2 rounded-xl border-[1.5px] px-3 py-2.5 text-left text-sm font-semibold transition ${
+                    className={`flex items-center justify-center gap-2 rounded-[10px] border-[1.5px] px-3 py-3 text-sm font-bold transition ${
                       foundPlace === "street"
-                        ? "border-[#2b51f0] bg-[#eef3ff] text-[#2b51f0]"
+                        ? "border-[#c41a1a] bg-[#c41a1a] text-white"
                         : "border-[var(--eborder)] bg-white text-[var(--etext)]"
                     }`}
                   >
@@ -596,27 +612,37 @@ export default function MissingPersonForm({
                 </div>
               </fieldset>
 
-              <div>
-                <label htmlFor="report-found-location" className="e-report-modal__label mb-1.5 block text-[13px] font-bold text-[var(--etext)]">
-                  {foundPlace === "hospital"
-                    ? "Nombre del hospital o clínica"
-                    : "Zona o referencia"}{" "}
-                  <span className="text-red-600">*</span>
-                </label>
+              {foundPlace === "hospital" && (
+                <select
+                  id="report-found-location"
+                  value={location}
+                  onChange={(e) => setLocation(e.target.value)}
+                  className="e-input"
+                  aria-label="Seleccionar hospital"
+                  required
+                >
+                  <option value="">Seleccionar hospital...</option>
+                  {REPORT_HOSPITAL_OPTIONS.map((hospital) => (
+                    <option key={hospital.value} value={hospital.value}>
+                      {hospital.label}
+                    </option>
+                  ))}
+                </select>
+              )}
+
+              {foundPlace === "street" && (
                 <input
                   id="report-found-location"
                   type="text"
                   value={location}
                   onChange={(e) => setLocation(e.target.value)}
                   maxLength={200}
-                  placeholder={
-                    foundPlace === "hospital"
-                      ? "Ej. Hospital JM de los Ríos"
-                      : "Ej. Catia La Mar, cerca de…"
-                  }
+                  placeholder="Ej. Av. Principal de Catia, frente a la plaza..."
                   className="e-input"
+                  aria-label="Referencia en la calle"
+                  required
                 />
-              </div>
+              )}
 
               <div>
                 <label htmlFor="report-found-when" className="e-report-modal__label mb-1.5 block text-[13px] font-bold text-[var(--etext)]">
@@ -641,9 +667,9 @@ export default function MissingPersonForm({
                     type="button"
                     onClick={() => setPersonStatus("safe")}
                     aria-pressed={personStatus === "safe"}
-                    className={`flex items-center gap-2 rounded-xl border-[1.5px] px-3 py-2.5 text-left text-sm font-semibold transition ${
+                    className={`flex items-center justify-center gap-2 rounded-[10px] border-[1.5px] px-3 py-3 text-sm font-bold transition ${
                       personStatus === "safe"
-                        ? "border-emerald-600 bg-emerald-50 text-emerald-800"
+                        ? "border-emerald-600 bg-emerald-600 text-white"
                         : "border-[var(--eborder)] bg-white text-[var(--etext)]"
                     }`}
                   >
@@ -654,9 +680,9 @@ export default function MissingPersonForm({
                     type="button"
                     onClick={() => setPersonStatus("deceased")}
                     aria-pressed={personStatus === "deceased"}
-                    className={`flex items-center gap-2 rounded-xl border-[1.5px] px-3 py-2.5 text-left text-sm font-semibold transition ${
+                    className={`flex items-center justify-center gap-2 rounded-[10px] border-[1.5px] px-3 py-3 text-sm font-bold transition ${
                       personStatus === "deceased"
-                        ? "border-red-300 bg-red-50 text-red-800"
+                        ? "border-red-700 bg-red-700 text-white"
                         : "border-[var(--eborder)] bg-white text-[var(--etext)]"
                     }`}
                   >
@@ -710,8 +736,8 @@ export default function MissingPersonForm({
                 className="mt-0.5 accent-red-600"
               />
               <span>
-                Confirmo que un familiar o allegado autoriza publicar estos
-                datos para ayudar a localizar a la persona.
+                Confirmo que esta información se comparte únicamente para
+                apoyar la localización de la persona.
               </span>
             </label>
           </div>

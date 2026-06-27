@@ -27,7 +27,7 @@ function EmergencyTickerLinks({
   links: readonly (typeof EMERGENCY_LINKS)[number][];
 }) {
   return (
-    <span className="inline-flex items-center px-8 text-xs font-bold text-red-900">
+    <span className="alert-ticker__phones inline-flex items-center px-8 text-xs font-bold text-red-900">
       <span aria-hidden className="mr-1">
         📞
       </span>
@@ -63,13 +63,13 @@ export default function AlertTicker() {
 
   return (
     <div
-      className={`alert-ticker flex min-h-[38px] items-center overflow-hidden border-y border-red-200 bg-red-100${
+      className={`alert-ticker flex min-h-[52px] items-stretch overflow-hidden border-y border-red-200 bg-red-100 sm:min-h-[38px] sm:items-center${
         paused ? " is-paused" : ""
       }`}
       aria-live="polite"
       onPointerDown={pauseTicker}
     >
-      <div className="flex h-full shrink-0 items-center gap-1.5 bg-[#C41A1A] px-4 text-[11px] font-extrabold uppercase tracking-widest text-white">
+      <div className="alert-ticker__label flex h-full shrink-0 items-center gap-1.5 self-stretch bg-[#C41A1A] px-3 text-[10px] font-extrabold uppercase tracking-widest text-white sm:px-4 sm:text-[11px]">
         <span
           className="inline-block h-[7px] w-[7px] rounded-full bg-white"
           style={{ animation: "pdot 2s ease-in-out infinite" }}
@@ -77,19 +77,21 @@ export default function AlertTicker() {
         />
         Alerta
       </div>
-      <div className="relative flex flex-1 items-center self-stretch overflow-hidden">
-        <div className="alert-ticker__track flex items-center whitespace-nowrap">
+      <div className="alert-ticker__viewport relative flex flex-1 items-center self-stretch overflow-hidden">
+        <div className="alert-ticker__track flex w-max items-center whitespace-nowrap">
           {items.map((item, i) =>
             item.kind === "text" ? (
               <span
                 key={i}
-                className="px-8 text-xs leading-none text-red-900"
+                className="alert-ticker__message shrink-0 px-6 text-[11px] leading-none text-red-900 sm:px-8 sm:text-xs"
                 style={{ fontWeight: 400 }}
               >
                 {item.message}
               </span>
             ) : (
-              <EmergencyTickerLinks key={i} links={item.links} />
+              <span key={i} className="hidden sm:inline-flex">
+                <EmergencyTickerLinks links={item.links} />
+              </span>
             ),
           )}
         </div>

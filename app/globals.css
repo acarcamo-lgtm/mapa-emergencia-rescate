@@ -724,6 +724,34 @@ a:focus-visible,
 	}
 }
 
+@media (max-width: 640px) {
+	.e-directory-tabs-bar {
+		align-items: stretch;
+		gap: 0.75rem;
+		padding-bottom: 0.75rem;
+	}
+
+	.e-directory-tablist {
+		width: 100%;
+		flex: 0 0 100%;
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+	}
+
+	.e-directory-tablist .e-tab-label {
+		min-width: 0;
+		padding-inline: 0.75rem;
+		white-space: nowrap;
+	}
+
+	.e-directory-report-btn {
+		width: 100%;
+		min-height: 46px;
+		margin-bottom: 0;
+		white-space: nowrap;
+	}
+}
+
 @media (max-width: 340px) {
 	.e-hero-emoji {
 		font-size: 26px;
@@ -1275,7 +1303,7 @@ a:focus-visible,
 .e-person-modal__close {
 	position: absolute;
 	top: 0.875rem;
-	left: 0.875rem;
+	right: 0.875rem;
 	z-index: 3;
 	display: grid;
 	place-items: center;
@@ -1675,7 +1703,7 @@ a:focus-visible,
 
 .e-report-modal__grid {
 	display: grid;
-	grid-template-columns: 1fr 1fr;
+	grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) !important;
 	gap: 0.875rem 0.75rem;
 }
 
@@ -1683,9 +1711,9 @@ a:focus-visible,
 	grid-column: 1 / -1;
 }
 
-@media (max-width: 480px) {
+@media (max-width: 360px) {
 	.e-report-modal__grid {
-		grid-template-columns: 1fr;
+		grid-template-columns: 1fr !important;
 	}
 }
 
@@ -1772,6 +1800,19 @@ a:focus-visible,
 	cursor: not-allowed;
 }
 
+@media (max-width: 380px) {
+	.e-donate-fab-btn {
+		width: 3rem;
+		height: 3rem;
+		justify-content: center;
+		padding: 0 !important;
+	}
+
+	.e-donate-fab-label {
+		display: none;
+	}
+}
+
 @media (max-width: 340px) {
 	input,
 	select,
@@ -1840,7 +1881,34 @@ a:focus-visible,
 
 @media (max-width: 640px) {
 	.alert-ticker__track {
-		animation-duration: 16s;
+		animation-duration: 18s;
+	}
+
+	.alert-ticker {
+		min-height: 52px;
+		align-items: stretch;
+	}
+
+	.alert-ticker__label {
+		align-self: stretch;
+		padding-inline: 0.75rem;
+		font-size: 10px;
+		letter-spacing: 0.06em;
+	}
+
+	.alert-ticker__viewport {
+		min-width: 0;
+	}
+
+	.alert-ticker__message {
+		display: inline-flex;
+		align-items: center;
+		width: auto;
+		max-width: none;
+		padding-inline: 1.5rem;
+		font-size: 11px;
+		line-height: 1;
+		white-space: nowrap;
 	}
 }
 
