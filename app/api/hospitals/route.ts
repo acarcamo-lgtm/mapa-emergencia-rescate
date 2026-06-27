@@ -12,6 +12,7 @@ import { checkRateLimit, clientIp } from "@/lib/ratelimit";
 import { cached } from "@/lib/cache";
 import { jsonWithEtag } from "@/lib/http";
 import { readJson, bodyErrorResponse, BODY_LIMIT_TEXT } from "@/lib/body";
+import { hospitalEnvelope, submitFederationIntake } from "@/lib/federation";
 
 export const dynamic = "force-dynamic";
 
@@ -179,8 +180,9 @@ export async function POST(request: Request) {
     );
   }
 
+  let hospital: Awaited<ReturnType<typeof addHospital>>;
   try {
-    const hospital = await addHospital({
+    hospital = await addHospital({
       name,
       facilityType: body.facilityType,
       state,
@@ -189,7 +191,6 @@ export async function POST(request: Request) {
       level: body.level,
       priorityZone: body.priorityZone,
     });
-    return NextResponse.json({ hospital }, { status: 201 });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Error desconocido";
     return NextResponse.json(
@@ -197,4 +198,7 @@ export async function POST(request: Request) {
       { status: 503 },
     );
   }
+
+  const federation = await submitFederationIntake(hospitalEnvelope(hospital, request));
+  return NextResponse.json({ hospital, federation }, { status: 201 });
 }

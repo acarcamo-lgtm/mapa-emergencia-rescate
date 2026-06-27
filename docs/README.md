@@ -105,4 +105,5 @@ acción.
 - [Desplegar la sincronización con Vercel Cron](guides/sincronizacion-cron-vercel.md)
 - [Rendimiento, capacidad y pruebas de carga](guides/rendimiento-y-pruebas-de-carga.md)
 - [Documentar endpoints (OpenAPI / Swagger)](guides/documentar-endpoints-openapi.md)
+- [Federación con Respuesta VE](guides/federacion-respuesta-ve.md)
 </content>
