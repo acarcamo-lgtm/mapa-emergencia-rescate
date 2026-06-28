@@ -4,188 +4,38 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { trackEvent } from "@/lib/openpanel";
 import { useTurnstile } from "@/hooks/useTurnstile";
+import {
+  SearchIcon,
+  PinIcon,
+  UploadIcon,
+  HospitalIcon,
+  StreetIcon,
+} from "./form-icons";
+import {
+  NATIONALITY_OPTIONS,
+  fileToResizedDataUrl,
+  formatLastSeen,
+  buildDescription,
+} from "./missing-form-helpers";
+import type {
+  MissingReportType,
+  FoundPlace,
+  PersonStatus,
+  MissingPersonPayload,
+} from "./types";
 
-export type MissingReportType = "missing" | "found";
-export type FoundPlace = "hospital" | "street";
-type PersonStatus = "safe" | "deceased";
+export type {
+  MissingReportType,
+  FoundPlace,
+  MissingPersonPayload,
+} from "./types";
 
-export interface MissingPersonPayload {
-  name: string;
-  age: string;
-  nationality: string;
-  lastSeen: string;
-  description: string;
-  contact: string;
-  photo: string | null;
-  reportType: MissingReportType;
-  turnstileToken?: string; // prueba de humanidad (Cloudflare Turnstile)
-}
 
 interface Props {
   onCancel: () => void;
   onSubmit: (payload: MissingPersonPayload) => Promise<void>;
   initialReportType?: MissingReportType;
   initialFoundPlace?: FoundPlace | null;
-}
-
-const MAX_DIM = 800;
-const JPEG_QUALITY = 0.62;
-const NATIONALITY_OPTIONS = [
-  "Venezolana",
-  "Colombiana",
-  "Peruana",
-  "Ecuatoriana",
-  "Chilena",
-  "Argentina",
-  "Brasileña",
-  "Cubana",
-  "Española",
-  "Otra",
-];
-
-async function fileToResizedDataUrl(file: File): Promise<string> {
-  const bitmap = await createImageBitmap(file);
-  let { width, height } = bitmap;
-  if (width >= height && width > MAX_DIM) {
-    height = Math.round((height * MAX_DIM) / width);
-    width = MAX_DIM;
-  } else if (height > MAX_DIM) {
-    width = Math.round((width * MAX_DIM) / height);
-    height = MAX_DIM;
-  }
-  const canvas = document.createElement("canvas");
-  canvas.width = width;
-  canvas.height = height;
-  const ctx = canvas.getContext("2d");
-  if (!ctx) throw new Error("No se pudo procesar la imagen.");
-  ctx.drawImage(bitmap, 0, 0, width, height);
-  bitmap.close?.();
-  return canvas.toDataURL("image/jpeg", JPEG_QUALITY);
-}
-
-function formatLastSeen(
-  location: string,
-  lastContactAt: string,
-  reportType: MissingReportType,
-  foundPlace?: FoundPlace,
-): string {
-  const loc = location.trim();
-  let base = loc;
-  if (reportType === "found" && foundPlace) {
-    const prefix =
-      foundPlace === "hospital" ? "En un hospital" : "En la calle";
-    base = loc ? `${prefix}: ${loc}` : prefix;
-  }
-  if (!lastContactAt.trim()) return base;
-  const d = new Date(lastContactAt);
-  if (Number.isNaN(d.getTime())) return base;
-  const when = d.toLocaleString("es-VE", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-  const suffix =
-    reportType === "found"
-      ? `Encontrada el ${when}`
-      : `Sin contacto desde ${when}`;
-  return base ? `${base} · ${suffix}` : suffix;
-}
-
-function buildDescription(
-  description: string,
-  reportType: MissingReportType,
-  personStatus?: PersonStatus,
-): string {
-  const text = description.trim();
-  if (reportType !== "found" || !personStatus) return text;
-  const statusLabel =
-    personStatus === "safe" ? "Estado: A salvo." : "Estado: Fallecida.";
-  return text ? `${statusLabel} ${text}` : statusLabel;
-}
-
-function SearchIcon({ className }: { className?: string }) {
-  return (
-    <svg
-      className={className}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      aria-hidden
-    >
-      <circle cx="11" cy="11" r="7" />
-      <path d="M20 20l-3.5-3.5" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function PinIcon({ className }: { className?: string }) {
-  return (
-    <svg
-      className={className}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      aria-hidden
-    >
-      <path
-        d="M12 21s6-5.2 6-10a6 6 0 10-12 0c0 4.8 6 10 6 10z"
-        strokeLinejoin="round"
-      />
-      <circle cx="12" cy="11" r="2.5" />
-    </svg>
-  );
-}
-
-function UploadIcon({ className }: { className?: string }) {
-  return (
-    <svg
-      className={className}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      aria-hidden
-    >
-      <path d="M12 16V4m0 0l-4 4m4-4l4 4" strokeLinecap="round" />
-      <path d="M4 20h16" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function HospitalIcon({ className }: { className?: string }) {
-  return (
-    <svg
-      className={className}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      aria-hidden
-    >
-      <path d="M3 21h18M5 21V7l7-4 7 4v14" strokeLinejoin="round" />
-      <path d="M12 11v4M10 13h4" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function StreetIcon({ className }: { className?: string }) {
-  return (
-    <svg
-      className={className}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      aria-hidden
-    >
-      <path d="M3 9l9-6 9 6v11H3V9z" strokeLinejoin="round" />
-      <path d="M9 20v-6h6v6" strokeLinejoin="round" />
-    </svg>
-  );
 }
 
 export default function MissingPersonForm({
