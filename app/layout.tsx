@@ -8,6 +8,7 @@ import MourningRibbon from "./components/MourningRibbon";
 import StickyHelpButton from "./components/StickyHelpButton";
 import OpenPanelProduction from "./components/OpenPanelProduction";
 import ThemeProvider from "./components/ThemeProvider";
+import QueryProvider from "./components/QueryProvider";
 
 const stara = localFont({
   src: [
@@ -178,9 +179,11 @@ export default function RootLayout({
           <OpenPanelProduction clientId={OPENPANEL_CLIENT_ID} />
         )}
 
-        {children}
+        <QueryProvider>
+          {children}
+          <StickyHelpButton />
+        </QueryProvider>
         <PwaRegister />
-        <StickyHelpButton />
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{
