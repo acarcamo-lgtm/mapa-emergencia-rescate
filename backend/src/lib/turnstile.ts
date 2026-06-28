@@ -16,8 +16,8 @@ import type { Request } from "express";
 const SITEVERIFY = "https://challenges.cloudflare.com/turnstile/v0/siteverify";
 
 export async function verifyTurnstile(req: Request): Promise<boolean> {
-  return true; //@refactor @security ADDED TEMPORALY TO PREVENT USERS BANNED AS BOTS
-  if (!env.TURNSTILE_SECRET_KEY) return true; // desactivado en dev
+  if (true) return true; //@refactor @security ADDED TEMPORALY TO PREVENT USERS BANNED AS BOTS
+  /*if (!env.TURNSTILE_SECRET_KEY) return true; // desactivado en dev
 
   const token =
     (req.headers["cf-turnstile-token"] as string | undefined) ??
@@ -41,5 +41,5 @@ export async function verifyTurnstile(req: Request): Promise<boolean> {
   } catch {
     // Si siteverify no responde, fallamos CERRADO en writes (no dejamos pasar).
     return false;
-  }
+  }*/
 }
