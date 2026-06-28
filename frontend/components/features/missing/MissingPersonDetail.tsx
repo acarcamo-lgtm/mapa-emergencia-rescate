@@ -220,6 +220,8 @@ export default function MissingPersonDetail({
               <img
                 src={mediaUrl(person.photoUrl)}
                 alt={`Foto de ${person.name}`}
+                loading="lazy"
+                decoding="async"
                 className="e-person-modal__photo"
                 onClick={() => setZoomOpen(true)}
               />
@@ -298,6 +300,8 @@ export default function MissingPersonDetail({
                   <img
                     src={mediaUrl(person.resolutionPhotoUrl)}
                     alt="Prueba de contacto"
+                    loading="lazy"
+                    decoding="async"
                     className="mt-2 max-h-48 w-full rounded-lg object-cover ring-1 ring-blue-200"
                   />
                 </a>
