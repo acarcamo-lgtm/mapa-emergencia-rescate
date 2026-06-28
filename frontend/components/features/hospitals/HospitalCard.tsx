@@ -7,7 +7,7 @@
  * estable de TanStack (structuralSharing) solo re-renderiza la tarjeta que cambia.
  */
 import { memo, useCallback } from "react";
-import { HospitalCard as DirectoryHospitalCard } from "@/app/components/HospitalDirectoryUI";
+import { HospitalCard as DirectoryHospitalCard } from "@/components/features/hospitals/HospitalDirectoryUI";
 import { trackHospitalDetailViewed } from "@/lib/analytics";
 import type { Hospital } from "@/lib/hospitals-meta";
 

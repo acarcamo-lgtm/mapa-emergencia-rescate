@@ -11,7 +11,7 @@ import {
   HospitalCard,
   HospitalStatsRow,
   HospitalZoneFilters,
-} from "@/app/components/HospitalDirectoryUI";
+} from "@/components/features/hospitals/HospitalDirectoryUI";
 import { trackHospitalDetailViewed } from "@/lib/analytics";
 import { useHospitals } from "@/hooks/hospitals";
 import { SearchInput } from "@/components/ui/SearchInput";

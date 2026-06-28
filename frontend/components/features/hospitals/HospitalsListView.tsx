@@ -12,7 +12,7 @@ import {
   type Hospital,
   type HospitalPriorityZone,
 } from "@/lib/hospitals-meta";
-import { HOSPITAL_ZONE_FILTERS } from "@/app/components/HospitalDirectoryUI";
+import { HOSPITAL_ZONE_FILTERS } from "@/components/features/hospitals/HospitalDirectoryUI";
 import { trackHospitalFilterUsed } from "@/lib/analytics";
 import SearchInput from "@/components/ui/SearchInput";
 import HospitalCard from "./HospitalCard";

@@ -10,7 +10,7 @@ import {
   type HospitalPatient,
   type PublicHospitalSupplySummary,
 } from "@/lib/hospitals-meta";
-import HospitalDetailView from "@/app/components/HospitalDetailView";
+import HospitalDetailView from "@/components/features/hospitals/HospitalDetailView";
 
 export const dynamic = "force-dynamic";
 

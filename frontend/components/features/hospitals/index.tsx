@@ -19,7 +19,7 @@ import {
   HospitalStatCard,
   computeHospitalStats,
   filterHospitals,
-} from "@/app/components/HospitalDirectoryUI";
+} from "@/components/features/hospitals/HospitalDirectoryUI";
 import {
   trackHospitalListViewed,
   trackHospitalPatientSearchResultsLoaded,
