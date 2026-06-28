@@ -4,12 +4,12 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { MapPinned } from "lucide-react";
-import TranslateWidget from "@/app/components/TranslateWidget";
+import TranslateWidget from "@/components/ui/TranslateWidget";
 import PsychologyHelpButton from "@/app/components/PsychologyHelpButton";
 import { DonateNavButton } from "@/app/components/DonateButton";
 import { SiteBrand } from "./HeroSection";
 import { toggleTheme } from "./ThemeProvider";
-import { useMissingStats } from "@/app/components/useMissingStats";
+import { useMissingStats } from "@/hooks/useMissingStats";
 import {
   MOBILE_BAR_LINKS,
   PRIMARY_MAP_LINK,

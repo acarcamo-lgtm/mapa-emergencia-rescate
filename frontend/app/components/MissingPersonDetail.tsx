@@ -3,8 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import MissingFoundForm, {
   type MissingFoundPayload,
-} from "./MissingFoundForm";
-import ImageZoomLightbox from "./ImageZoomLightbox";
+} from "@/app/components/MissingFoundForm";
+import ImageZoomLightbox from "@/components/ui/ImageZoomLightbox";
 import { mediaUrl } from "@/lib/api";
 
 interface MissingPerson {

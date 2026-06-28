@@ -24,7 +24,7 @@ import {
   trackHospitalListViewed,
   trackHospitalPatientSearchResultsLoaded,
   trackHospitalPatientSearchStarted,
-} from "@/app/components/analytics";
+} from "@/lib/analytics";
 import {
   useHospitals,
   usePatientSearch,

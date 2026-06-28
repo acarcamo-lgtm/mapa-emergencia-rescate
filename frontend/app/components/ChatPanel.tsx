@@ -1,9 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from "react";
-import { useLowBandwidthMode } from "./useLowBandwidthMode";
-import { trackEvent } from "./openpanel";
-import { useTurnstile } from "./useTurnstile";
+import { useLowBandwidthMode } from "@/hooks/useLowBandwidthMode";
+import { trackEvent } from "@/lib/openpanel";
+import { useTurnstile } from "@/hooks/useTurnstile";
 import {
   useChatMessages,
   useDeleteChatMessage,

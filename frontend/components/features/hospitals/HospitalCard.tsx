@@ -8,7 +8,7 @@
  */
 import { memo, useCallback } from "react";
 import { HospitalCard as DirectoryHospitalCard } from "@/app/components/HospitalDirectoryUI";
-import { trackHospitalDetailViewed } from "@/app/components/analytics";
+import { trackHospitalDetailViewed } from "@/lib/analytics";
 import type { Hospital } from "@/lib/hospitals-meta";
 
 export interface HospitalCardProps {

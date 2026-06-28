@@ -3,7 +3,7 @@
 import dynamic from "next/dynamic";
 
 const SeismicRiskLeafletMap = dynamic(
-  () => import("./SeismicRiskLeafletMap"),
+  () => import("@/app/components/SeismicRiskLeafletMap"),
   {
     ssr: false,
     loading: () => (

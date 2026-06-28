@@ -2,8 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { REPORT_TYPES, REPORT_TYPE_KEYS, type ReportType } from "@/lib/types";
-import { trackEvent } from "./openpanel";
-import { useTurnstile } from "./useTurnstile";
+import { trackEvent } from "@/lib/openpanel";
+import { useTurnstile } from "@/hooks/useTurnstile";
 
 interface ReportFormProps {
   /** Ubicación elegida, o null mientras el usuario aún no la define. */

@@ -6,8 +6,8 @@ import {
   STRIPE_DONATION_URL,
   formatDonationUsd,
 } from "@/lib/donation-shared";
-import { trackEvent } from "./openpanel";
-import { useDonationMonthly } from "./useDonationMonthly";
+import { trackEvent } from "@/lib/openpanel";
+import { useDonationMonthly } from "@/app/components/useDonationMonthly";
 
 type Props = {
   titleId?: string;

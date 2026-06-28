@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { CONTACT_EMAIL } from "@/lib/site";
 import { useContactSubmit } from "@/hooks/contact";
-import { useTurnstile } from "./useTurnstile";
+import { useTurnstile } from "@/hooks/useTurnstile";
 
 export default function ContactForm() {
   const [name, setName] = useState("");

@@ -9,8 +9,8 @@ import {
   formatDonationUsd,
 } from "@/lib/donation-shared";
 import { useCreateDonation } from "@/hooks/donations";
-import { trackEvent } from "./openpanel";
-import { useTurnstile } from "./useTurnstile";
+import { trackEvent } from "@/lib/openpanel";
+import { useTurnstile } from "@/hooks/useTurnstile";
 
 const SUGGESTED_AMOUNTS = [500, 1000, 2500, 5000, 10000] as const;
 

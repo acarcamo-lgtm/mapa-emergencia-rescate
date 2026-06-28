@@ -1,8 +1,8 @@
 "use client";
 
 import { useCallback, useRef, useState } from "react";
-import { trackEvent } from "./openpanel";
-import { useTurnstile } from "./useTurnstile";
+import { trackEvent } from "@/lib/openpanel";
+import { useTurnstile } from "@/hooks/useTurnstile";
 
 export interface MissingFoundPayload {
   note: string;

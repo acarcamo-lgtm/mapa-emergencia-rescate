@@ -5,7 +5,7 @@ import L from "leaflet";
 import { Marker, Popup } from "react-leaflet";
 import edificiosData from "@/data/derived/edificios-afectados.json";
 import { REPORT_TYPES } from "@/lib/types";
-import LinkText from "./LinkText";
+import LinkText from "@/components/ui/LinkText";
 import { severityMeta } from "@/lib/severity";
 import { xShareHrefFor, whatsappShareHrefFor } from "@/lib/share";
 import {

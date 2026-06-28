@@ -2,8 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { trackEvent } from "./openpanel";
-import { useTurnstile } from "./useTurnstile";
+import { trackEvent } from "@/lib/openpanel";
+import { useTurnstile } from "@/hooks/useTurnstile";
 
 export type MissingReportType = "missing" | "found";
 export type FoundPlace = "hospital" | "street";

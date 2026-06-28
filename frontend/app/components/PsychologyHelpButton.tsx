@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { psychologyHelpUrl } from "@/lib/site";
 import { apiFetch } from "@/lib/api";
-import { trackEvent } from "./openpanel";
+import { trackEvent } from "@/lib/openpanel";
 
 function psychologyClickLabel(count: number): string {
   const n = count.toLocaleString("es-VE");

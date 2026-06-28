@@ -12,7 +12,7 @@ import {
   HospitalStatsRow,
   HospitalZoneFilters,
 } from "@/app/components/HospitalDirectoryUI";
-import { trackHospitalDetailViewed } from "@/app/components/analytics";
+import { trackHospitalDetailViewed } from "@/lib/analytics";
 import { useHospitals } from "@/hooks/hospitals";
 import { SearchInput } from "@/components/ui/SearchInput";
 import { Pagination } from "@/components/ui/Pagination";

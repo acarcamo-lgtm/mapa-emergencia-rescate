@@ -1,6 +1,6 @@
 "use client";
 
-import { trackEvent } from "./openpanel";
+import { trackEvent } from "@/lib/openpanel";
 
 type CountBucket = "0" | "1" | "2_5" | "6_20" | "21_plus";
 
