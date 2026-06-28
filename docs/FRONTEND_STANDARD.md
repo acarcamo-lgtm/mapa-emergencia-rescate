@@ -68,8 +68,12 @@ Duda "¿ui o feature?": si el componente nombra o conoce un concepto del dominio
   `setInterval` + `setState` a mano en un componente.
 - **UI presentacional** → `components/ui/*` (sin datos, solo props).
 - **Componentes de feature** → `components/features/<dominio>/*`: orquestan hooks
-  + UI. Un archivo = una responsabilidad. NINGÚN componente > ~250 líneas; si
-  crece, se divide.
+  + UI. Un archivo = una responsabilidad. **Meta de tamaño:** presentacionales y
+  listas **< 250 líneas (dura)**; forms/modales con estado cohesivo pueden quedar
+  ~300-450 cuando partirlos exigiría prop-drilling que empeora la cohesión.
+  Extraer SIEMPRE lo que NO es la orquestación del form: data estática
+  (`lib/data`), helpers puros, iconos/SVG, tipos, y secciones genuinamente
+  independientes.
 - **Hooks de UI locales** (derivación/estado de una sola feature, p. ej.
   `useHospitalGridColumns`) → dentro de la carpeta de la feature, no en `hooks/`.
 
