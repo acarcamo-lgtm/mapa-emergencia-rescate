@@ -14,6 +14,15 @@ import {
   trackPersonSearchStarted,
 } from "./analytics";
 import { timeAgo } from "@/lib/format";
+import { apiSend } from "@/lib/api-client";
+import { useApiList } from "@/lib/hooks-client";
+
+// ============================================================================
+// PATRÓN CANÓNICO de componente de lista (seguir en los demás):
+//   - Los DATOS (fetch, polling, dedup, identidad) viven en useApiList.
+//   - El componente solo: arma la URL, renderiza, y hace MUTACIONES (POST/DELETE)
+//     con apiSend + patchLocal optimista. Cero fetch/setInterval a mano.
+// ============================================================================
 
 interface MissingPerson {
   id: string;
@@ -55,43 +64,59 @@ function pageWindow(page: number, totalPages: number): number[] {
   return pages;
 }
 
+function buildUrl(page: number, search: string): string {
+  const params = new URLSearchParams({
+    page: String(page),
+    pageSize: String(PAGE_SIZE),
+  });
+  if (search.length >= MIN_SEARCH_LEN) params.set("q", search);
+  return `/api/missing?${params.toString()}`;
+}
+
 export default function MissingPersons() {
-  const [people, setPeople] = useState<MissingPerson[]>([]);
-  const [total, setTotal] = useState(0);
-  const [totalCapped, setTotalCapped] = useState(false);
-  const [totalPages, setTotalPages] = useState(1);
   const [page, setPage] = useState(1);
   const [query, setQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const [showForm, setShowForm] = useState(false);
   const [adminToken, setAdminToken] = useState<string | null>(null);
-  const [persistent, setPersistent] = useState(true);
   const [selected, setSelected] = useState<MissingPerson | null>(null);
   const [lastFetchAt, setLastFetchAt] = useState<number | null>(null);
-  const [refreshing, setRefreshing] = useState(false);
   const [now, setNow] = useState<number>(() => Date.now());
   const lastTrackedSearchRef = useRef("");
   const lastTrackedResultsRef = useRef("");
+  const listTopRef = useRef<HTMLDivElement | null>(null);
+  const initialPageRef = useRef(true);
+
   const network = useLowBandwidthMode(
     POLL_INTERVAL_MS,
     LOW_BANDWIDTH_POLL_INTERVAL_MS,
   );
-  const requestIdRef = useRef(0);
-  const listTopRef = useRef<HTMLDivElement | null>(null);
-  const initialPageRef = useRef(true);
-  // Caché de páginas visitadas (memoria, por sesión): volver a una página ya
-  // vista es INSTANTÁNEO (sin esperar al servidor). Se revalida en segundo plano
-  // (stale-while-revalidate). Clave: status:query:page. Se limpia al cambiar de
-  // término de búsqueda. ponytail: Map simple, sin librería.
-  const pageCacheRef = useRef<
-    Map<string, { people: MissingPerson[]; total: number; totalPages: number; totalCapped: boolean }>
-  >(new Map());
-  const cacheKey = useCallback(
-    (p: number) => `active:${debouncedQuery.trim()}:${p}`,
-    [debouncedQuery],
-  );
 
-  // Debounce de la búsqueda: al cambiar el término volvemos a la página 1.
+  const search = debouncedQuery.trim();
+  const url = buildUrl(page, search);
+
+  const {
+    items: people,
+    total,
+    totalPages,
+    totalCapped,
+    persistent,
+    serverPage,
+    fetching,
+    refetch,
+    patchLocal,
+    setTotalLocal,
+  } = useApiListMissing(url, network.pollIntervalMs);
+
+  // Token admin: lo leemos al montar y cuando vuelve el foco (login en otra parte).
+  useEffect(() => {
+    const read = () => setAdminToken(sessionStorage.getItem(ADMIN_STORAGE_KEY));
+    read();
+    window.addEventListener("focus", read);
+    return () => window.removeEventListener("focus", read);
+  }, []);
+
+  // Debounce de búsqueda: al cambiar el término, vuelve a la página 1.
   useEffect(() => {
     const t = setTimeout(() => {
       setDebouncedQuery(query);
@@ -100,127 +125,43 @@ export default function MissingPersons() {
     return () => clearTimeout(t);
   }, [query]);
 
+  // El server acota la página al rango válido (p.ej. tras borrados): seguirlo.
   useEffect(() => {
-    const q = debouncedQuery.trim();
-    if (!q || lastTrackedSearchRef.current === q) return;
-    lastTrackedSearchRef.current = q;
-    trackPersonSearchStarted("missing_persons", true);
-  }, [debouncedQuery]);
+    if (serverPage != null && serverPage !== page) setPage(serverPage);
+  }, [serverPage, page]);
 
-  const load = useCallback(
-    async (manual = false) => {
-      const requestId = ++requestIdRef.current;
-      setAdminToken(sessionStorage.getItem(ADMIN_STORAGE_KEY));
-      if (manual) setRefreshing(true);
-      try {
-        const params = new URLSearchParams({
-          page: String(page),
-          pageSize: String(PAGE_SIZE),
-        });
-        // Solo buscamos con MIN_SEARCH_LEN+ caracteres; por debajo, listado normal.
-        if (debouncedQuery.trim().length >= MIN_SEARCH_LEN) {
-          params.set("q", debouncedQuery.trim());
-        }
-        // El refresco manual evita la caché del CDN; el polling la aprovecha.
-        if (manual) params.set("_", String(Date.now()));
-        const res = await fetch(`/api/missing?${params.toString()}`, {
-          cache: "no-cache",
-        });
-        if (!res.ok) return;
-        const data = await res.json();
-        // Ignorar respuestas de solicitudes anteriores (carrera con polling).
-        if (requestId !== requestIdRef.current) return;
-        const nextPeople = data.people ?? [];
-        const nextTotal = data.total ?? 0;
-        const nextTotalPages = data.totalPages ?? 1;
-        const nextCapped = Boolean(data.totalCapped);
-        setPeople(nextPeople);
-        setTotal(nextTotal);
-        setTotalCapped(nextCapped);
-        setTotalPages(nextTotalPages);
-        setPersistent(Boolean(data.persistent));
-        setLastFetchAt(Date.now());
-        // Guardar en caché para que volver a esta página sea instantáneo.
-        pageCacheRef.current.set(cacheKey(page), {
-          people: nextPeople,
-          total: nextTotal,
-          totalPages: nextTotalPages,
-          totalCapped: nextCapped,
-        });
-        if (debouncedQuery.trim()) {
-          const resultsKey = `${debouncedQuery.trim()}:${page}:${nextTotal}`;
-          if (lastTrackedResultsRef.current !== resultsKey) {
-            lastTrackedResultsRef.current = resultsKey;
-            trackPersonSearchResultsLoaded({
-              source: "missing_persons",
-              resultsCount: nextTotal,
-              page,
-            });
-          }
-        }
-        // El servidor acota la página al rango válido (p. ej. tras borrados).
-        if (typeof data.page === "number" && data.page !== page) {
-          setPage(data.page);
-        }
-      } catch {
-        // se reintenta en el siguiente ciclo
-      } finally {
-        if (manual) setRefreshing(false);
-      }
-    },
-    [page, debouncedQuery, cacheKey],
-  );
-
-  // Al cambiar el término de búsqueda, la caché de páginas vieja ya no aplica.
+  // Marca de tiempo "actualizada hace X" cuando llega una respuesta de fondo.
   useEffect(() => {
-    pageCacheRef.current.clear();
-  }, [debouncedQuery]);
+    if (!fetching) setLastFetchAt(Date.now());
+  }, [fetching]);
 
-  // Al cambiar de página: si ya la visitamos, mostramos la caché AL INSTANTE
-  // (stale-while-revalidate); el poll/load de fondo la refresca. Evita el parpadeo
-  // y la espera al servidor en 1→2→1.
-  useEffect(() => {
-    const cached = pageCacheRef.current.get(cacheKey(page));
-    if (cached) {
-      setPeople(cached.people);
-      setTotal(cached.total);
-      setTotalPages(cached.totalPages);
-      setTotalCapped(cached.totalCapped);
-    }
-  }, [page, cacheKey]);
-
-  // Re-render del indicador "actualizado hace X" cada 5 s sin pedir red.
+  // Tick del indicador "hace X" cada 5 s sin pedir red.
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 5_000);
     return () => clearInterval(id);
   }, []);
 
-  // Carga de la página actual + polling, pausado cuando la pestaña no es visible.
+  // Analítica: búsqueda iniciada.
   useEffect(() => {
-    let interval: ReturnType<typeof setInterval> | null = null;
-    const start = () => {
-      if (interval) return;
-      load();
-      interval = setInterval(() => load(), network.pollIntervalMs);
-    };
-    const stop = () => {
-      if (interval) clearInterval(interval);
-      interval = null;
-    };
-    const onVisibility = () => {
-      if (document.visibilityState === "visible") start();
-      else stop();
-    };
-    onVisibility();
-    document.addEventListener("visibilitychange", onVisibility);
-    return () => {
-      stop();
-      document.removeEventListener("visibilitychange", onVisibility);
-    };
-  }, [load, network.pollIntervalMs]);
+    if (!search || lastTrackedSearchRef.current === search) return;
+    lastTrackedSearchRef.current = search;
+    trackPersonSearchStarted("missing_persons", true);
+  }, [search]);
 
-  // Al cambiar de página, hacemos scroll al inicio de la lista para mostrar
-  // los nuevos resultados (no en la carga inicial).
+  // Analítica: resultados de búsqueda cargados.
+  useEffect(() => {
+    if (!search) return;
+    const key = `${search}:${page}:${total}`;
+    if (lastTrackedResultsRef.current === key) return;
+    lastTrackedResultsRef.current = key;
+    trackPersonSearchResultsLoaded({
+      source: "missing_persons",
+      resultsCount: total,
+      page,
+    });
+  }, [search, page, total]);
+
+  // Scroll al inicio al cambiar de página (no en la carga inicial).
   useEffect(() => {
     if (initialPageRef.current) {
       initialPageRef.current = false;
@@ -229,6 +170,7 @@ export default function MissingPersons() {
     listTopRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   }, [page]);
 
+  // Abrir el formulario desde el hash #reportar-desaparecido.
   useEffect(() => {
     const openFromHash = () => {
       if (window.location.hash === "#reportar-desaparecido") {
@@ -243,65 +185,51 @@ export default function MissingPersons() {
     return () => window.removeEventListener("hashchange", openFromHash);
   }, []);
 
-  const handleSubmit = useCallback(async (payload: MissingPersonPayload) => {
-    const res = await fetch("/api/missing", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) {
-      throw new Error(data.error ?? "No se pudo guardar el reporte.");
-    }
-    setShowForm(false);
-    // El nuevo reporte es el más reciente: volvemos al inicio para verlo.
-    setQuery("");
-    setDebouncedQuery("");
-    setPage(1);
-  }, []);
+  const handleSubmit = useCallback(
+    async (payload: MissingPersonPayload) => {
+      await apiSend("POST", "/api/missing", payload);
+      setShowForm(false);
+      // El nuevo reporte es el más reciente: volvemos al inicio para verlo.
+      setQuery("");
+      setDebouncedQuery("");
+      setPage(1);
+      refetch(true);
+    },
+    [refetch],
+  );
 
   const handleDelete = useCallback(
     async (id: string) => {
       if (!adminToken) return;
-      setPeople((prev) => prev.filter((p) => p.id !== id));
-      setTotal((t) => Math.max(0, t - 1));
-      setSelected((current) => (current?.id === id ? null : current));
-      await fetch(`/api/missing/${id}`, {
-        method: "DELETE",
-        headers: { "x-admin-token": adminToken },
-      }).catch(() => null);
-      // Resincronizamos para rellenar la página y corregir totales.
-      load();
+      // Optimista: quita la tarjeta y baja el total ya; resync al terminar.
+      patchLocal((prev) => prev.filter((p) => p.id !== id));
+      setTotalLocal((t) => Math.max(0, t - 1));
+      setSelected((cur) => (cur?.id === id ? null : cur));
+      try {
+        await apiSend("DELETE", `/api/missing/${id}`);
+      } catch {
+        /* el refetch corrige si falló */
+      }
+      refetch();
     },
-    [adminToken, load],
+    [adminToken, patchLocal, setTotalLocal, refetch],
   );
 
   const handleMarkFound = useCallback(
     async (id: string, payload: { note: string; photo: string | null }) => {
-      const res = await fetch(`/api/missing/${id}/found`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        throw new Error(data.error ?? "No se pudo marcar como localizada.");
-      }
-      // Quitamos de la lista pública y cerramos modal con feedback.
-      setPeople((prev) => prev.filter((p) => p.id !== id));
-      setTotal((t) => Math.max(0, t - 1));
+      await apiSend("POST", `/api/missing/${id}/found`, payload);
+      // Sale de la lista pública (activas).
+      patchLocal((prev) => prev.filter((p) => p.id !== id));
+      setTotalLocal((t) => Math.max(0, t - 1));
       setSelected(null);
-      load();
+      refetch();
     },
-    [load],
+    [patchLocal, setTotalLocal, refetch],
   );
 
   const pages = useMemo(() => pageWindow(page, totalPages), [page, totalPages]);
-  const isSearching = debouncedQuery.trim().length >= MIN_SEARCH_LEN;
-  // El usuario empezó a escribir pero aún no alcanza el mínimo para buscar.
-  const queryTooShort =
-    debouncedQuery.trim().length > 0 &&
-    debouncedQuery.trim().length < MIN_SEARCH_LEN;
+  const isSearching = search.length >= MIN_SEARCH_LEN;
+  const queryTooShort = search.length > 0 && search.length < MIN_SEARCH_LEN;
 
   return (
     <div ref={listTopRef} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
@@ -331,11 +259,11 @@ export default function MissingPersons() {
               </span>
               <button
                 type="button"
-                onClick={() => load(true)}
-                disabled={refreshing}
+                onClick={() => refetch(true)}
+                disabled={fetching}
                 className="rounded-md border border-slate-200 px-2 py-0.5 font-medium text-slate-600 transition hover:bg-slate-50 disabled:opacity-60"
               >
-                {refreshing ? "🔄 Cargando…" : "🔄 Refrescar"}
+                {fetching ? "🔄 Cargando…" : "🔄 Refrescar"}
               </button>
             </div>
           </div>
@@ -378,7 +306,7 @@ export default function MissingPersons() {
             aria-live="polite"
             className="mt-3 text-xs font-medium text-slate-500"
           >
-            {totalCapped ? `${total}+` : total} resultado{total === 1 ? "" : "s"} para “{debouncedQuery.trim()}”
+            {totalCapped ? `${total}+` : total} resultado{total === 1 ? "" : "s"} para “{search}”
           </p>
         )}
 
@@ -386,7 +314,7 @@ export default function MissingPersons() {
           <div className="mt-6 rounded-xl bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
             <p>
               {isSearching
-                ? `No se encontraron personas para “${debouncedQuery.trim()}”.`
+                ? `No se encontraron personas para “${search}”.`
                 : "Aún no hay personas reportadas. Usa el botón para agregar la primera."}
             </p>
             {isSearching && (
@@ -595,4 +523,27 @@ export default function MissingPersons() {
         )}
       </div>
   );
+}
+
+/** Envuelve useApiList fijando el selector y exponiendo un setter de total local
+ *  para las mutaciones optimistas (delete / mark-found bajan el contador ya). */
+function useApiListMissing(url: string, pollMs: number) {
+  const list = useApiList<MissingPerson>(url, {
+    selectItems: (r) => (r.people as MissingPerson[]) ?? [],
+    pollMs,
+  });
+  // useApiList recalcula `total` desde el server en cada respuesta; para la baja
+  // optimista mantenemos un override local que el próximo refetch reemplaza.
+  const [totalOverride, setTotalOverride] = useState<number | null>(null);
+  const lastServerTotal = useRef(list.total);
+  useEffect(() => {
+    if (list.total !== lastServerTotal.current) {
+      lastServerTotal.current = list.total;
+      setTotalOverride(null); // llegó dato fresco del server → suelta el override
+    }
+  }, [list.total]);
+  const setTotalLocal = useCallback((fn: (t: number) => number) => {
+    setTotalOverride((cur) => fn(cur ?? lastServerTotal.current));
+  }, []);
+  return { ...list, total: totalOverride ?? list.total, setTotalLocal };
 }

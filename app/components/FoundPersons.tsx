@@ -64,7 +64,10 @@ export default function FoundPersons() {
     try {
       const res = await fetch(
         `/api/missing?status=found&page=${page}&pageSize=${PAGE_SIZE}`,
-        { cache: "no-store" },
+        // no-cache (revalidar con If-None-Match), NO no-store: el endpoint emite
+        // ETag + stale-while-revalidate; con no-store se tiraba ese 304 y se
+        // re-descargaba el payload completo en cada poll.
+        { cache: "no-cache" },
       );
       if (!res.ok) return;
       const data = await res.json();

@@ -13,7 +13,7 @@
  *    cacheado por GET. No interceptamos POST/DELETE.
  */
 
-const CACHE_VERSION = "v2";
+const CACHE_VERSION = "v3";
 const STATIC_CACHE = `static-${CACHE_VERSION}`;
 const PHOTO_CACHE = `photos-${CACHE_VERSION}`;
 const TILE_CACHE = `tiles-${CACHE_VERSION}`;
@@ -45,7 +45,11 @@ const CORE_API_SNAPSHOTS = [
 // Mantener sincronizado con el grupo "Emergencias (línea directa)" de
 // app/components/EmergencyContacts.tsx.
 const OFFLINE_HTML = `<!doctype html><html lang="es"><head><meta charset="utf-8"/><title>Sin conexión · Teléfonos de emergencia</title><meta name="viewport" content="width=device-width,initial-scale=1"/><style>body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:#f8fafc;color:#0f172a;margin:0;padding:2rem 1rem;min-height:100vh;box-sizing:border-box}main{max-width:30rem;margin:0 auto;text-align:center}h1{margin:.5rem 0;font-size:1.25rem}p{color:#475569}.lead{max-width:28rem;margin:.5rem auto 1.5rem}ul{list-style:none;padding:0;margin:0;display:grid;gap:.5rem;text-align:left}li{display:flex;align-items:center;justify-content:space-between;gap:.75rem;border:1px solid #e2e8f0;background:#fff;border-radius:.75rem;padding:.625rem .875rem}.name{font-size:.875rem;font-weight:500;color:#1e293b}a.call{display:inline-flex;align-items:center;gap:.375rem;border:1px solid #fecaca;background:#fff;color:#b91c1c;font-weight:700;text-decoration:none;border-radius:.5rem;padding:.5rem .75rem;font-size:.875rem}.note{margin-top:1.5rem;font-size:.75rem;color:#64748b}</style></head><body><main><h1>🛰️ Sin conexión</h1><p class="lead">No hay internet en este momento. Estos teléfonos de emergencia funcionan aunque la app no cargue:</p><ul><li><span class="name">Cantv (desde fijo)</span><a class="call" href="tel:171">📞 171</a></li><li><span class="name">Movilnet</span><a class="call" href="tel:*1">📞 *1</a></li><li><span class="name">Digitel</span><a class="call" href="tel:112">📞 112</a></li><li><span class="name">Movistar</span><a class="call" href="tel:911">📞 911</a></li></ul><p class="note">Cuando vuelva la conexión podrás ver el mapa, reportar y consultar la lista completa de bomberos y ambulancias.</p></main></body></html>`;
-const API_TIMEOUT_MS = 2500;
+// 8s: 2.5s era demasiado agresivo — abandonaba requests legítimos (un /api/missing
+// frío ronda ~450ms pero bajo carga/cold-start podía pasar de 2.5s) y servía cache
+// viejo mientras el fetch real seguía. Con el AbortController de fetchWithTimeout,
+// un request lento ahora se CANCELA limpio al vencer, sin fugas.
+const API_TIMEOUT_MS = 8000;
 const NAVIGATION_TIMEOUT_MS = 4000;
 
 self.addEventListener("install", (event) => {
@@ -113,13 +117,17 @@ async function networkFirst(request, cacheName) {
   }
 }
 
+// AbortController real: al vencer el timeout, CANCELA el fetch — no solo pierde
+// la carrera. Sin esto, un Promise.race dejaba el fetch huérfano corriendo en
+// segundo plano (se veían respuestas de 15s en DevTools iniciadas por sw.js aun
+// cuando el SW ya había devuelto cache a los 2.5s): bandwidth desperdiciado y
+// el pool de conexiones agotado por requests que nadie consume.
 function fetchWithTimeout(request, timeoutMs) {
-  return Promise.race([
-    fetch(request),
-    new Promise((_, reject) =>
-      setTimeout(() => reject(new Error("network timeout")), timeoutMs),
-    ),
-  ]);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  return fetch(request, { signal: controller.signal }).finally(() =>
+    clearTimeout(timer),
+  );
 }
 
 self.addEventListener("fetch", (event) => {

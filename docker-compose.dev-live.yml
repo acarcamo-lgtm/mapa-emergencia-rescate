@@ -1,0 +1,25 @@
+# Override de compose para correr la imagen Docker proxeando /api al backend LIVE.
+# La app NO toca Postgres local: todas las rutas /api se reescriben a la API de
+# producción (rewrite de next.config.ts, activado por DEV_API_PROXY=1, que se lee
+# al ARRANCAR el server — no hace falta rebuild si solo cambia esto).
+#
+#   docker compose -f docker-compose.yml -f docker-compose.dev-live.yml up --build app
+#   docker compose -f docker-compose.yml -f docker-compose.dev-live.yml down
+#
+# Apunta a staging con DEV_API_ORIGIN=https://<staging>.
+services:
+  app:
+    build:
+      # CRÍTICO: con output:"standalone" los rewrites se compilan en BUILD time
+      # al routes-manifest. Hay que pasar el proxy como build-arg, no solo como
+      # env de runtime (que Next ignora para rewrites). Sin esto la imagen sirve
+      # su propio /api (Postgres local vacío → "0 reportadas").
+      args:
+        DEV_API_PROXY: "1"
+        DEV_API_ORIGIN: "https://api.terremotovenezuela.app"
+    environment:
+      DEV_API_PROXY: "1"
+      DEV_API_ORIGIN: "https://api.terremotovenezuela.app"
+    # No anulamos depends_on (compose fusiona listas, no las reemplaza): dejamos
+    # que `db` arranque aunque la app no lo use — el proxy sirve TODO /api desde
+    # la API live. Es ocioso, no molesta.

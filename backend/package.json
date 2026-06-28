@@ -1,0 +1,26 @@
+{
+  "name": "mapa-backend",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "API backend (Express + Drizzle + Valkey) para mapa-emergencia-rescate. Reusa el esquema Drizzle de ../infra/db y mantiene los MISMOS contratos de respuesta que las rutas Next previas (el frontend no cambia).",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/server.js",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "express": "^5.1.0",
+    "drizzle-orm": "*",
+    "ioredis": "5.10.1",
+    "zod": "^3.23.8",
+    "pg": "*"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.0",
+    "@types/node": "^20",
+    "tsx": "*",
+    "typescript": "^5"
+  }
+}

@@ -37,6 +37,15 @@ ENV NEXT_PUBLIC_OPENPANEL_PRODUCTION_HOST=$NEXT_PUBLIC_OPENPANEL_PRODUCTION_HOST
 ARG NEXT_PUBLIC_OPENPANEL_DASHBOARD_URL
 ENV NEXT_PUBLIC_OPENPANEL_DASHBOARD_URL=$NEXT_PUBLIC_OPENPANEL_DASHBOARD_URL
 ENV NEXT_TELEMETRY_DISABLED=1
+# Proxy de desarrollo a la API live (next.config.ts rewrites). DEBE estar en
+# BUILD time: con output:"standalone" los rewrites se compilan al routes-manifest
+# durante `next build`, no se leen en runtime. Vacío en builds reales (el deploy
+# no pasa estos args) → sin rewrite, la app sirve su propio /api. Solo el override
+# docker-compose.dev-live.yml los setea para probar el front contra prod.
+ARG DEV_API_PROXY
+ENV DEV_API_PROXY=$DEV_API_PROXY
+ARG DEV_API_ORIGIN
+ENV DEV_API_ORIGIN=$DEV_API_ORIGIN
 RUN npm run build
 
 # ---- worker: BullMQ migration workers (separate Deployment, same image repo) ----

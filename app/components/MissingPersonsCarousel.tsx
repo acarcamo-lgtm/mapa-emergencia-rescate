@@ -719,8 +719,11 @@ function HospitalesPreview() {
     const load = async () => {
       setLoading(true);
       try {
+        // no-cache: el endpoint emite ETag + SWR; los hospitales casi nunca
+        // cambian, así que un payload de ~1000 filas se vuelve un 304 vacío en
+        // recargas en vez de re-descargarse entero (era el fetch más pesado).
         const res = await fetch("/api/hospitals?limit=1000", {
-          cache: "no-store",
+          cache: "no-cache",
         });
         if (!res.ok) return;
         const data = await res.json();

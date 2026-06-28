@@ -34,6 +34,30 @@ const nextConfig: NextConfig = {
   assetPrefix: process.env.NEXT_PUBLIC_ASSET_PREFIX
     ? process.env.NEXT_PUBLIC_ASSET_PREFIX.replace(/\/$/, "")
     : undefined,
+  // Proxy de DESARROLLO: proxea /api/* al backend LIVE para iterar el frontend
+  // contra datos reales sin levantar Postgres/Valkey local. Rewrite del lado del
+  // servidor de Next (mismo origen para el browser → CERO CORS; el API live no
+  // manda access-control-allow-origin).
+  //
+  // Se activa SOLO con DEV_API_PROXY=1 (interruptor explícito), independiente de
+  // NODE_ENV, para poder usarlo también dentro de la imagen Docker (que corre en
+  // producción) vía `docker compose -f docker-compose.yml -f docker-compose.dev-live.yml`.
+  // NUNCA se setea en el deploy real (deploy-hetzner.yml no lo pasa), así que un
+  // pod de prod jamás se proxea a sí mismo. Destino configurable con DEV_API_ORIGIN.
+  async rewrites() {
+    if (process.env.DEV_API_PROXY !== "1") return [];
+    const origin =
+      process.env.DEV_API_ORIGIN || "https://api.terremotovenezuela.app";
+    // beforeFiles (NO afterFiles): la app TIENE rutas reales en /api/**, y un
+    // rewrite afterFiles solo rellena huecos — nunca shadowea una ruta existente,
+    // así el handler local ganaba (Postgres vacío → "0 reportadas"). beforeFiles
+    // corre ANTES del matcheo de rutas, así el proxy intercepta /api/* siempre.
+    return {
+      beforeFiles: [
+        { source: "/api/:path*", destination: `${origin}/api/:path*` },
+      ],
+    };
+  },
 };
 
 export default nextConfig;
