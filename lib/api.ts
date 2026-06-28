@@ -1,17 +1,34 @@
 /**
- * Wrapper de fetch tipado para el frontend. ÚNICO punto de red:
- *  - rutas relativas (/api/...) -> mismo origen en prod; en dev el proxy de
- *    next.config.ts las manda al backend live.
- *  - GET con cache:"no-cache" => revalida con If-None-Match => el server responde
- *    304 vacío cuando nada cambió (NUNCA no-store, que tira ese ahorro).
- *  - timeout con AbortController (no deja fetches huérfanos colgados).
- *  - errores tipados (ApiError con status) para que TanStack Query / mutaciones
- *    decidan reintentos y mensajes.
+ * Wrapper de fetch tipado para el frontend. ÚNICO punto de red.
  *
- * TanStack Query se encarga de cache/dedup/poll/refetch; este módulo solo habla
- * HTTP. Los queryFn/mutationFn lo usan.
+ * Arquitectura: frontend y backend son servicios SEPARADOS (tier web vs tier api,
+ * subdominio api.terremotovenezuela.app con su propio LB). El frontend llama al
+ * backend por su URL ABSOLUTA (patrón estándar SPA/Next + API aparte, igual que
+ * boahaus/argo), NO por rutas relativas. El backend habilita CORS para el origen
+ * del frontend.
+ *
+ *  - API_BASE = NEXT_PUBLIC_API_URL (p.ej. https://api.terremotovenezuela.app en
+ *    prod, http://localhost:8080 en dev). Si no está seteada, cae a "" (mismo
+ *    origen) — útil para tests/SSR.
+ *  - se pasan credenciales (cookies) con credentials:"include" por si el backend
+ *    usa sesión/cookies; los tokens admin van por header donde aplica.
+ *  - GET con cache:"no-cache" => revalida con If-None-Match => 304 vacío si nada
+ *    cambió (NUNCA no-store, que tira ese ahorro).
+ *  - timeout con AbortController (no deja fetches huérfanos).
+ *  - errores tipados (ApiError con status).
+ *
+ * TanStack Query maneja cache/dedup/poll/refetch; este módulo solo habla HTTP.
  */
 const DEFAULT_TIMEOUT_MS = 8000;
+
+/** URL base del backend. Vacío => mismo origen (fallback SSR/test). */
+export const API_BASE = (process.env.NEXT_PUBLIC_API_URL ?? "").replace(/\/$/, "");
+
+/** Antepone API_BASE a rutas que empiezan con "/" (deja URLs absolutas intactas). */
+function resolveUrl(path: string): string {
+  if (/^https?:\/\//.test(path)) return path;
+  return `${API_BASE}${path}`;
+}
 
 export class ApiError extends Error {
   status: number;
@@ -32,7 +49,11 @@ async function request<T>(
   // Encadena el signal de TanStack Query (cancela al cambiar queryKey) con el timeout.
   if (signal) signal.addEventListener("abort", () => ctrl.abort(), { once: true });
   try {
-    const res = await fetch(path, { signal: ctrl.signal, ...rest });
+    const res = await fetch(resolveUrl(path), {
+      signal: ctrl.signal,
+      credentials: "include",
+      ...rest,
+    });
     if (!res.ok) {
       let msg = `${rest.method ?? "GET"} ${path} -> ${res.status}`;
       try {

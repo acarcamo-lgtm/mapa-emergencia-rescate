@@ -1,15 +1,18 @@
-# Local / test environment: the app + a real Postgres (TCP), mirroring prod.
+# Entorno LOCAL completo de la arquitectura v2: frontend (Next) + backend
+# (Express) + Postgres + Valkey, reflejando prod (tier web + tier api separados).
 #
-# One app image (this is a single full-stack Next.js app — UI + /api route
-# handlers — so there is ONE Dockerfile, unlike BH/Hermes which have separate
-# backend+frontend apps). Postgres here exercises the pg-TCP path in lib/db.ts
-# (the same path used against the Hetzner Postgres VPS), not Neon.
+#   docker compose up --build -d     # frontend :3000, backend :8080, db :5432
+#   docker compose logs -f backend
+#   docker compose down              # parar (CONSERVA los datos del volumen)
+#   docker compose down -v           # parar + BORRAR datos
 #
-#   docker compose up --build      # app on http://localhost:3000
-#   docker compose down -v         # stop + wipe the db volume
+# Datos reales de prod viven en el volumen `postgres_data` (cargados por dump SSH).
+# Persisten entre up/down; solo `down -v` los borra.
 #
-# Valkey is intentionally omitted: no app code consumes it yet (it's in the
-# deploy plan, not the codebase). Add it when something uses it.
+# Wiring API (como en prod): el frontend llama al backend por URL ABSOLUTA
+# (NEXT_PUBLIC_API_URL). El browser corre fuera de la red de Docker, así que la
+# URL es http://localhost:8080 (NO el nombre de servicio). NEXT_PUBLIC_* se
+# inlinea en build → va como build-arg. El backend habilita CORS para :3000.
 services:
   db:
     image: postgres:16
@@ -27,24 +30,53 @@ services:
       timeout: 5s
       retries: 10
 
-  app:
+  valkey:
+    image: valkey/valkey:8-alpine
+    command: ["valkey-server", "--appendonly", "yes"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - valkey_data:/data
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  backend:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: backend/Dockerfile
     environment:
-      # In-container, reach Postgres by service name.
+      PORT: "8080"
       DATABASE_URL: postgres://mapa_app:localdev@db:5432/app
-      # Pin the driver explicitly (don't rely on host autodetection).
-      DB_DRIVER: tcp
-      # Dev local: sin proxy de confianza, cae a x-real-ip. NO uses
-      # x-forwarded-for en prod (falsificable → anula el rate-limit).
-      TRUSTED_IP_HEADER: ""
+      VALKEY_URL: redis://valkey:6379
+      # CORS: el frontend (browser en localhost:3000) llama cross-origin al backend.
+      CORS_ORIGINS: http://localhost:3000
+      TRUSTED_IP_HEADER: "" # dev: cae a req.ip
       IP_SALT: localdev-salt
+      ADMIN_PASSWORD: localadmin
+      # Turnstile DESACTIVADO en local (sin secret → requireHuman deja pasar).
     ports:
-      - "3000:3000"
+      - "8080:8080"
     depends_on:
       db:
         condition: service_healthy
+      valkey:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        # URL absoluta del backend para el BROWSER (no la red de Docker).
+        NEXT_PUBLIC_API_URL: "http://localhost:8080"
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
 
 volumes:
   postgres_data:
+  valkey_data:
