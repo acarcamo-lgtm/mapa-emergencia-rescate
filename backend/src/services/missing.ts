@@ -1,16 +1,32 @@
 /**
  * Service de personas desaparecidas. La LÓGICA y las consultas viven aquí (no en
- * el route). El workflow de port debe trasladar la implementación real desde el
- * lib/missing.ts del app Next previo (listMissingPage / addMissing / fotos /
- * stats / map), preservando el comportamiento EXACTO, y devolviendo SIEMPRE DTOs
- * por allowlist (toMissingDTO) — nunca la fila de DB cruda.
+ * el route). Portado desde lib/missing.ts del app Next previo, preservando el
+ * comportamiento EXACTO y devolviendo SIEMPRE DTOs por allowlist (rowToPerson) —
+ * nunca la fila de DB cruda (jamás se expone `photo`/`resolution_photo` ni
+ * `ip_hash`, solo URLs derivadas /api/missing/:id/photo).
  *
- * Por ahora define los tipos + DTO + firmas para fijar el contrato; las consultas
- * Drizzle se completan en el port reusando getDb() de @/db.
+ * Diferencia con el app Next: NO hay fallback en memoria. El backend SIEMPRE
+ * corre con DATABASE_URL (validado en config/env). Las ramas `hasDbEnv()` del
+ * lib previo colapsan a la rama de DB.
  */
+import { eq, sql } from "drizzle-orm";
 import { getDb, schema } from "@/db";
+import { isR2Configured, uploadPhotoDataUrl } from "@/lib/r2";
+import { isAllowedImageDataUrl, parseImageDataUri } from "@/lib/image";
 
-// DTO público (allowlist explícita de campos — NUNCA exponer ip_hash, etc.)
+const { missingPersons } = schema;
+
+/**
+ * Normaliza el resultado de `getDb().execute()` a un arreglo de filas. El driver
+ * neon-http devuelve el arreglo directo; node-postgres devuelve `{ rows }`.
+ */
+function execRows<T>(result: unknown): T[] {
+  return (Array.isArray(result) ? result : (result as { rows: T[] }).rows) as T[];
+}
+
+export type MissingStatus = "active" | "found";
+
+/** Registro de persona desaparecida tal como se expone al cliente (sin la foto embebida). */
 export interface MissingDTO {
   id: string;
   name: string;
@@ -19,79 +35,563 @@ export interface MissingDTO {
   description: string;
   lastSeen: string;
   contact: string;
+  /** URL del endpoint que sirve la foto, o null si no hay foto. */
   photoUrl: string | null;
-  status: "active" | "found";
+  status: MissingStatus;
+  /** Texto que comparte quien marca a la persona como localizada. */
+  resolutionNote: string | null;
+  /** URL del endpoint que sirve la foto-prueba de la resolución, si hay. */
+  resolutionPhotoUrl: string | null;
+  resolvedAt: number | null;
   createdAt: number;
 }
 
-export interface ListResult {
-  people: MissingDTO[];
-  total: number;
-  totalCapped: boolean;
-  page: number;
-  pageSize: number;
-  totalPages: number;
-  persistent: boolean;
+/** Marcador ligero para el mapa (sin cargar toda la ficha). */
+export interface MissingMapMarker {
+  id: string;
+  name: string;
+  age: number | null;
+  nationality: string;
+  lastSeen: string;
+  photoUrl: string | null;
+  lat: number;
+  lng: number;
+  createdAt: number;
 }
 
-export interface ListParams {
-  status: "active" | "found" | "all";
-  page: number;
-  pageSize: number;
-  search?: string;
+export interface MissingStats {
+  active: number;
+  found: number;
+  total: number;
+  onMap: number;
 }
+
+export type MissingReportType = "missing" | "found";
 
 export interface CreateInput {
   name: string;
   age?: number | string | null;
-  nationality?: string;
+  nationality?: string | null;
   description?: string;
   lastSeen?: string;
   contact?: string;
+  /** Data URL de la foto (data:image/...;base64,...). Opcional. */
   photo?: string | null;
-  reportType?: "missing" | "found";
+  /** Reporte de persona desaparecida (activa) o encontrada (localizada). */
+  reportType?: MissingReportType;
 }
 
-/** Allowlist de salida: fila DB -> DTO público.
- *
- *  IMPORTANTE sobre fotos (verificado contra lib/missing.ts + r2.ts):
- *   - La columna `photo` está SOBRECARGADA: con R2 configurado guarda la URL de
- *     R2 (puntero), sin R2 guarda el data-URL base64. `photoExternalUrl` es de la
- *     pipeline de import (fuentes externas), distinta de las fotos de usuario.
- *   - NUNCA exponemos `photo` cruda al cliente (puede ser base64 pesado, y aunque
- *     sea URL de R2 queremos una indirección estable). El DTO expone SIEMPRE la
- *     ruta /api/missing/:id/photo, que internamente hace 302 a R2 o sirve bytes.
- *   - photoUrl = esa ruta si hay CUALQUIER foto (photo o photoExternalUrl), si no null. */
-export function toMissingDTO(row: typeof schema.missingPersons.$inferSelect): MissingDTO {
-  const hasPhoto = Boolean(row.photo || row.photoExternalUrl);
-  const photoUrl = hasPhoto ? `/api/missing/${row.id}/photo` : null;
+export const MAX_NAME = 120;
+export const MAX_NATIONALITY = 80;
+export const MAX_DESCRIPTION = 600;
+export const MAX_LAST_SEEN = 200;
+export const MAX_CONTACT = 120;
+/** Límite del data URL de la foto (~1.4 MB en base64 ≈ 1 MB de imagen). */
+export const MAX_PHOTO_CHARS = 1_400_000;
+export const MAX_RESOLUTION_NOTE = 600;
+
+/** Tamaño de página por defecto y máximo permitido para el listado paginado. */
+export const DEFAULT_PAGE_SIZE = 48;
+export const MAX_PAGE_SIZE = 100;
+
+/**
+ * Mínimo de caracteres por término de búsqueda. El índice GIN de trigramas no
+ * puede servir términos de <3 caracteres (haría un seq scan completo).
+ */
+export const MIN_SEARCH_LEN = 3;
+/** Tope del conteo de resultados de búsqueda (se muestra "500+"). */
+export const SEARCH_COUNT_CAP = 500;
+/** Cap del conteo SIN búsqueda (listado por status). Ver lib/missing.ts. */
+export const LIST_COUNT_CAP = 100_000;
+
+/**
+ * Indica si la búsqueda acento-insensitiva (unaccent + pg_trgm) está disponible.
+ * Detectamos (una vez, cacheado) si el índice `idx_missing_search` existe. Si no,
+ * se cae a ILIKE sobre las columnas crudas (sensible a acentos).
+ */
+let _accentSearchReady: Promise<boolean> | null = null;
+function accentSearchReady(): Promise<boolean> {
+  if (!_accentSearchReady) {
+    _accentSearchReady = (async () => {
+      try {
+        const db = await getDb();
+        const res = await db.execute(
+          sql`SELECT to_regclass('public.idx_missing_search') AS oid`,
+        );
+        const rows = execRows<{ oid: string | null }>(res);
+        return Boolean(rows[0]?.oid);
+      } catch {
+        return false;
+      }
+    })();
+  }
+  return _accentSearchReady;
+}
+
+// Tipo de fila tal como sale del builder para las columnas que seleccionamos
+// (has_photo / has_resolution_photo se derivan en SQL, no son columnas reales).
+type Row = {
+  id: string;
+  name: string;
+  age: number | null;
+  nationality: string | null;
+  description: string;
+  last_seen: string;
+  contact: string;
+  has_photo: boolean;
+  photo_external_url: string | null;
+  status: string | null;
+  resolution_note: string | null;
+  has_resolution_photo: boolean;
+  resolved_at: string | number | null;
+  created_at: string | number;
+};
+
+/** Allowlist de salida: fila DB -> DTO público. Mismo mapeo que lib/missing.ts. */
+function rowToPerson(row: Row): MissingDTO {
+  const photoUrl = row.has_photo
+    ? `/api/missing/${row.id}/photo`
+    : row.photo_external_url
+      ? row.photo_external_url
+      : null;
   return {
     id: row.id,
     name: row.name,
-    age: row.age,
+    age: row.age === null ? null : Number(row.age),
     nationality: row.nationality ?? "",
-    description: row.description ?? "",
-    lastSeen: row.lastSeen ?? "",
-    contact: row.contact ?? "",
+    description: row.description,
+    lastSeen: row.last_seen,
+    contact: row.contact,
     photoUrl,
-    status: (row.status as "active" | "found") ?? "active",
-    createdAt: Number(row.createdAt),
+    status: (row.status === "found" ? "found" : "active") as MissingStatus,
+    resolutionNote: row.resolution_note ?? null,
+    resolutionPhotoUrl: row.has_resolution_photo
+      ? `/api/missing/${row.id}/resolution-photo`
+      : null,
+    resolvedAt: row.resolved_at !== null ? Number(row.resolved_at) : null,
+    createdAt: Number(row.created_at),
   };
 }
 
+function normalizeAge(age: CreateInput["age"]): number | null {
+  if (age === null || age === undefined || age === "") return null;
+  const n = Math.trunc(Number(age));
+  if (!Number.isFinite(n) || n < 0 || n > 130) return null;
+  return n;
+}
+
+/** Valida que la cadena sea un data URL de imagen soportada (ver lib/image.ts). */
 export function isValidPhotoDataUrl(photo: string): boolean {
-  return /^data:image\/(jpeg|jpg|png|webp);base64,/.test(photo);
+  return isAllowedImageDataUrl(photo);
 }
 
-// PORT: trasladar la consulta paginada real (trigram search, count cap, etc.)
-// desde lib/missing.ts:listMissingPage. Firma y salida ya fijadas arriba.
-export async function listMissingPage(_params: ListParams): Promise<ListResult> {
-  await getDb();
-  throw new Error("PORT_PENDING: listMissingPage — trasladar lógica de lib/missing.ts");
+export type MissingStatusFilter = "active" | "found" | "all";
+
+export interface ListMissingPageParams {
+  status?: MissingStatusFilter;
+  page?: number;
+  pageSize?: number;
+  search?: string;
 }
 
-// PORT: trasladar addMissing (normalización, R2 upload, insert) desde lib/missing.ts.
-export async function addMissing(_input: CreateInput): Promise<MissingDTO> {
-  await getDb();
-  throw new Error("PORT_PENDING: addMissing — trasladar lógica de lib/missing.ts");
+export interface MissingPageResult {
+  people: MissingDTO[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+  /** true si `total` se truncó en el cap del conteo (mostrar "N+"). */
+  totalCapped: boolean;
+}
+
+function clampInt(
+  value: number | undefined,
+  min: number,
+  max: number,
+  fallback: number,
+): number {
+  const n = Math.trunc(Number(value));
+  if (!Number.isFinite(n)) return fallback;
+  return Math.min(Math.max(n, min), max);
+}
+
+function stripAccents(s: string): string {
+  return s.normalize("NFD").replace(/[̀-ͯ]/g, "");
+}
+
+/**
+ * Palabras de búsqueda en minúsculas (sin patrones), máx. 8. Se descartan los
+ * términos de menos de `MIN_SEARCH_LEN` caracteres (el trigram no los indexa).
+ */
+function searchTerms(search: string | undefined): string[] {
+  return (search ?? "")
+    .trim()
+    .toLowerCase()
+    .split(/\s+/)
+    .filter((t) => t.length >= MIN_SEARCH_LEN)
+    .slice(0, 8);
+}
+
+/**
+ * Listado paginado con búsqueda server-side. Paginación por offset construyendo
+ * el WHERE dinámicamente: sin término de búsqueda no se agrega predicado, de modo
+ * que `idx_missing_status_created` sirve el orden + LIMIT; cada término es un
+ * ILIKE explícito que el índice GIN de trigramas puede usar. SQL crudo porque el
+ * WHERE/ORDER se arma dinámico y usa f_unaccent/ILIKE. Semántica idéntica a la
+ * de lib/missing.ts:listMissingPage.
+ */
+export async function listMissingPage(
+  params: ListMissingPageParams = {},
+): Promise<MissingPageResult> {
+  const status = params.status ?? "active";
+  const pageSize = clampInt(params.pageSize, 1, MAX_PAGE_SIZE, DEFAULT_PAGE_SIZE);
+  const requestedPage = clampInt(params.page, 1, Number.MAX_SAFE_INTEGER, 1);
+  const rawTerms = searchTerms(params.search);
+
+  const db = await getDb();
+  const useAccent = await accentSearchReady();
+
+  const conditions: ReturnType<typeof sql>[] = [];
+
+  if (status !== "all") {
+    conditions.push(sql`status = ${status}`);
+  }
+
+  const fieldExpr = useAccent
+    ? sql`f_unaccent(name || ' ' || last_seen || ' ' || coalesce(description, ''))`
+    : sql`lower(name || ' ' || last_seen || ' ' || coalesce(description, ''))`;
+  // Con acentos disponibles comparamos contra el texto sin acentos en ambos
+  // lados; en el fallback respetamos el texto crudo (sensible a acentos).
+  const terms = useAccent ? rawTerms.map(stripAccents) : rawTerms;
+  for (const term of terms) {
+    conditions.push(sql`${fieldExpr} ILIKE ${`%${term}%`}`);
+  }
+
+  const whereSql = conditions.length
+    ? sql`WHERE ${sql.join(conditions, sql` AND `)}`
+    : sql``;
+  const orderSql =
+    status === "found"
+      ? sql`COALESCE(resolved_at, created_at) DESC, id DESC`
+      : sql`created_at DESC, id DESC`;
+
+  const hasSearch = terms.length > 0;
+  const cap = hasSearch ? SEARCH_COUNT_CAP : LIST_COUNT_CAP;
+  const countQuery = sql`SELECT count(*)::int AS n FROM (SELECT 1 FROM missing_persons ${whereSql} LIMIT ${cap}) t`;
+
+  // Conteo y página independientes → en paralelo (la latencia es el MAX, no la
+  // suma). Offset calculado con requestedPage directo; si excede el total,
+  // devuelve vacío (evita el waterfall).
+  const offset = (requestedPage - 1) * pageSize;
+  const [countRes, listRes] = await Promise.all([
+    db.execute(countQuery),
+    db.execute(
+      sql`SELECT id, name, age, description, last_seen, contact,
+                 (photo IS NOT NULL) AS has_photo,
+                 photo_external_url,
+                 status,
+                 resolution_note,
+                 (resolution_photo IS NOT NULL) AS has_resolution_photo,
+                 resolved_at, created_at
+          FROM missing_persons ${whereSql} ORDER BY ${orderSql} LIMIT ${pageSize} OFFSET ${offset}`,
+    ),
+  ]);
+  const total = execRows<{ n: number }>(countRes)[0]?.n ?? 0;
+  const totalCapped = total >= cap;
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const page = Math.min(requestedPage, totalPages);
+  const rows = execRows<Row>(listRes);
+
+  return { people: rows.map(rowToPerson), total, page, pageSize, totalPages, totalCapped };
+}
+
+export async function addMissing(input: CreateInput): Promise<MissingDTO> {
+  const id = crypto.randomUUID();
+  const name = (input.name ?? "").trim().slice(0, MAX_NAME);
+  const age = normalizeAge(input.age);
+  const nationality = (input.nationality ?? "").trim().slice(0, MAX_NATIONALITY);
+  const description = (input.description ?? "").trim().slice(0, MAX_DESCRIPTION);
+  const lastSeen = (input.lastSeen ?? "").trim().slice(0, MAX_LAST_SEEN);
+  const contact = (input.contact ?? "").trim().slice(0, MAX_CONTACT);
+  const photo =
+    typeof input.photo === "string" && input.photo ? input.photo : null;
+  const createdAt = Date.now();
+  const isFound = input.reportType === "found";
+  const status: MissingStatus = isFound ? "found" : "active";
+  const resolutionNote = isFound ? description : null;
+  const resolvedAt = isFound ? createdAt : null;
+
+  // Si R2 está configurado, la foto va al CDN y guardamos la URL (no base64).
+  // Hard-fail: si la subida falla, el error sube y el endpoint no confirma.
+  let stored = photo;
+  let migratedAt: number | null = null;
+  if (photo && isR2Configured()) {
+    stored = await uploadPhotoDataUrl(photo, "missing_persons", id);
+    migratedAt = Date.now();
+  }
+
+  const db = await getDb();
+  await db.insert(missingPersons).values({
+    id,
+    name,
+    age,
+    nationality,
+    description,
+    lastSeen,
+    contact,
+    photo: stored,
+    photoMigratedAt: migratedAt,
+    createdAt,
+    status,
+    resolutionNote,
+    resolvedAt,
+  });
+
+  return {
+    id,
+    name,
+    age,
+    nationality,
+    description,
+    lastSeen,
+    contact,
+    photoUrl: photo ? `/api/missing/${id}/photo` : null,
+    status,
+    resolutionNote,
+    resolutionPhotoUrl: null,
+    resolvedAt,
+    createdAt,
+  };
+}
+
+/**
+ * Marca a una persona como localizada agregando una nota obligatoria y una
+ * foto-prueba opcional. Devuelve el registro actualizado o null si no existía.
+ */
+export async function markMissingFound(
+  id: string,
+  note: string,
+  resolutionPhoto: string | null,
+): Promise<MissingDTO | null> {
+  const cleanNote = note.trim().slice(0, MAX_RESOLUTION_NOTE);
+  if (!cleanNote) throw new Error("Falta la descripción de cómo se comunicaron.");
+  const validPhoto =
+    resolutionPhoto && isValidPhotoDataUrl(resolutionPhoto) ? resolutionPhoto : null;
+  const resolvedAt = Date.now();
+  // Foto-prueba a R2 cuando está configurado (hard-fail). `photo` será la URL.
+  let photo = validPhoto;
+  if (validPhoto && isR2Configured()) {
+    photo = await uploadPhotoDataUrl(validPhoto, "resolution", id);
+  }
+
+  // El builder de update().set().where().returning() no resuelve sobre el tipo
+  // unión de drivers; usamos el escape `sql` preservando la semántica exacta.
+  const db = await getDb();
+  const result = await db.execute(
+    sql`UPDATE missing_persons
+        SET status = 'found',
+            resolution_note = ${cleanNote},
+            resolution_photo = ${photo},
+            resolved_at = ${resolvedAt}
+        WHERE id = ${id} AND COALESCE(status, 'active') = 'active'
+        RETURNING id, name, age, nationality, description, last_seen, contact,
+                  (photo IS NOT NULL) AS has_photo,
+                  photo_external_url,
+                  COALESCE(status, 'active') AS status,
+                  resolution_note,
+                  (resolution_photo IS NOT NULL) AS has_resolution_photo,
+                  resolved_at,
+                  created_at`,
+  );
+  const rows = execRows<Row>(result);
+  return rows.length > 0 ? rowToPerson(rows[0]!) : null;
+}
+
+export async function restoreMissing(id: string): Promise<boolean> {
+  // Escape `sql` por el tipo unión de drivers. Misma semántica que el UPDATE ...
+  // RETURNING id previo.
+  const db = await getDb();
+  const result = await db.execute(
+    sql`UPDATE missing_persons
+        SET status = 'active',
+            resolution_note = NULL,
+            resolution_photo = NULL,
+            resolved_at = NULL
+        WHERE id = ${id} AND COALESCE(status, 'active') = 'found'
+        RETURNING id`,
+  );
+  return execRows<{ id: string }>(result).length > 0;
+}
+
+export interface PhotoData {
+  contentType: string;
+  buffer: Buffer;
+}
+
+/** La foto está alojada externamente; el endpoint debe redirigir a esta URL. */
+export interface RemotePhoto {
+  redirectTo: string;
+}
+
+function dataUrlToPhoto(dataUrl: string | null): PhotoData | null {
+  if (!dataUrl) return null;
+  // Usa el parser central: rechaza subtipos no permitidos (svg/gif).
+  const parsed = parseImageDataUri(dataUrl);
+  if (!parsed) return null;
+  return { contentType: parsed.contentType, buffer: parsed.bytes };
+}
+
+/**
+ * Devuelve la foto de una persona. Puede ser un data URL embebido (se sirven los
+ * bytes) o una URL remota (importada de fuentes externas), en cuyo caso se indica
+ * una redirección. Null si no existe.
+ */
+export async function getMissingPhoto(
+  id: string,
+): Promise<PhotoData | RemotePhoto | null> {
+  const db = await getDb();
+  const rows = await db
+    .select({
+      photo: missingPersons.photo,
+      photoExternalUrl: missingPersons.photoExternalUrl,
+    })
+    .from(missingPersons)
+    .where(eq(missingPersons.id, id));
+  const stored = rows[0]?.photo ?? null;
+  const externalUrl = rows[0]?.photoExternalUrl ?? null;
+  if (stored) {
+    if (/^https?:\/\//i.test(stored)) return { redirectTo: stored };
+    return dataUrlToPhoto(stored);
+  }
+  if (externalUrl && /^https?:\/\//i.test(externalUrl)) {
+    return { redirectTo: externalUrl };
+  }
+  return null;
+}
+
+/** Foto-prueba que se subió al marcar a la persona como localizada. */
+export async function getMissingResolutionPhoto(
+  id: string,
+): Promise<PhotoData | RemotePhoto | null> {
+  const db = await getDb();
+  const rows = await db
+    .select({ resolutionPhoto: missingPersons.resolutionPhoto })
+    .from(missingPersons)
+    .where(eq(missingPersons.id, id));
+  const dataUrl = rows[0]?.resolutionPhoto ?? null;
+  // Foto-prueba migrada a R2: redirigir al CDN en vez de servir bytes.
+  if (dataUrl && /^https?:\/\//i.test(dataUrl)) return { redirectTo: dataUrl };
+  return dataUrlToPhoto(dataUrl);
+}
+
+export async function removeMissing(id: string): Promise<boolean> {
+  // Escape `sql` por el tipo unión de drivers. Misma semántica que el DELETE ...
+  // RETURNING id previo.
+  const db = await getDb();
+  const result = await db.execute(
+    sql`DELETE FROM missing_persons WHERE id = ${id} RETURNING id`,
+  );
+  return execRows<{ id: string }>(result).length > 0;
+}
+
+/** Totales consolidados para el panel del mapa y el hero. */
+export async function countMissingStats(): Promise<MissingStats> {
+  const db = await getDb();
+  const rows = await db
+    .select({
+      total: sql<number>`count(*)::int`,
+      active: sql<number>`count(*) FILTER (WHERE ${missingPersons.status} = 'active')::int`,
+      found: sql<number>`count(*) FILTER (WHERE ${missingPersons.status} = 'found')::int`,
+      on_map: sql<number>`count(*) FILTER (
+        WHERE ${missingPersons.status} = 'active' AND ${missingPersons.lat} IS NOT NULL AND ${missingPersons.lng} IS NOT NULL
+      )::int`,
+    })
+    .from(missingPersons);
+  const row = rows[0] ?? { total: 0, active: 0, found: 0, on_map: 0 };
+  return {
+    total: Number(row.total),
+    active: Number(row.active),
+    found: Number(row.found),
+    onMap: Number(row.on_map),
+  };
+}
+
+export interface ListMissingMapParams {
+  north?: number;
+  south?: number;
+  east?: number;
+  west?: number;
+  limit?: number;
+}
+
+type MapRow = {
+  id: string;
+  name: string;
+  age: number | null;
+  nationality: string | null;
+  last_seen: string;
+  has_photo: boolean;
+  photo_external_url: string | null;
+  lat: number;
+  lng: number;
+  created_at: string | number;
+};
+
+/** Marcadores de desaparecidos activos con coordenadas (viewport opcional). */
+export async function listMissingMapMarkers(
+  params: ListMissingMapParams = {},
+): Promise<MissingMapMarker[]> {
+  const limit = Math.min(Math.max(Math.trunc(params.limit ?? 500), 1), 2000);
+
+  const conditions: ReturnType<typeof sql>[] = [
+    sql`status = 'active'`,
+    sql`lat IS NOT NULL`,
+    sql`lng IS NOT NULL`,
+  ];
+
+  const { north, south, east, west } = params;
+  if (
+    north !== undefined &&
+    south !== undefined &&
+    east !== undefined &&
+    west !== undefined &&
+    Number.isFinite(north) &&
+    Number.isFinite(south) &&
+    Number.isFinite(east) &&
+    Number.isFinite(west)
+  ) {
+    conditions.push(
+      sql`lat BETWEEN ${Math.min(south, north)} AND ${Math.max(south, north)}`,
+    );
+    conditions.push(
+      sql`lng BETWEEN ${Math.min(west, east)} AND ${Math.max(west, east)}`,
+    );
+  }
+
+  const db = await getDb();
+  const res = await db.execute(
+    sql`SELECT id, name, age, nationality, last_seen,
+               (photo IS NOT NULL) AS has_photo,
+               photo_external_url,
+               lat, lng, created_at
+        FROM missing_persons
+        WHERE ${sql.join(conditions, sql` AND `)}
+        ORDER BY created_at DESC
+        LIMIT ${limit}`,
+  );
+  const rows = execRows<MapRow>(res);
+
+  return rows.map((row) => ({
+    id: row.id,
+    name: row.name,
+    age: row.age === null ? null : Number(row.age),
+    nationality: row.nationality ?? "",
+    lastSeen: row.last_seen,
+    photoUrl: row.has_photo
+      ? `/api/missing/${row.id}/photo`
+      : row.photo_external_url,
+    lat: Number(row.lat),
+    lng: Number(row.lng),
+    createdAt: Number(row.created_at),
+  }));
 }

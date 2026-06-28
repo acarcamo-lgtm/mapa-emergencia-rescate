@@ -2,6 +2,19 @@ import express from "express";
 import { env, corsOrigins } from "@/config/env";
 import { errorHandler } from "@/middleware";
 import { missingRouter } from "@/routes/missing";
+import { reportsRouter } from "@/routes/reports";
+import { chatRouter } from "@/routes/chat";
+import { hospitalsRouter } from "@/routes/hospitals";
+import { donationsRouter } from "@/routes/donations";
+import { patientsRouter } from "@/routes/patients";
+import { geocodeRouter } from "@/routes/geocode";
+import { geoRouter } from "@/routes/geo";
+import { psychologyHelpRouter } from "@/routes/psychology-help";
+import { contactRouter } from "@/routes/contact";
+import { hubRouter } from "@/routes/hub";
+import { syncRouter } from "@/routes/sync";
+import { adminRouter } from "@/routes/admin";
+import { opRouter } from "@/routes/op";
 
 const app = express();
 
@@ -38,6 +51,19 @@ app.get("/api/readyz", (_req, res) => res.json({ ok: true }));
 
 // Rutas. (Reference endpoint ahora; el resto las añade el workflow de port.)
 app.use("/api/missing", missingRouter);
+app.use("/api/reports", reportsRouter);
+app.use("/api/chat", chatRouter);
+app.use("/api/hospitals", hospitalsRouter);
+app.use("/api/donations", donationsRouter);
+app.use("/api/patients", patientsRouter);
+app.use("/api/geocode", geocodeRouter);
+app.use("/api/geo", geoRouter);
+app.use("/api/stats/psychology-help", psychologyHelpRouter);
+app.use("/api/contact", contactRouter);
+app.use("/api/hub", hubRouter);
+app.use("/api/sync", syncRouter);
+app.use("/api/admin", adminRouter);
+app.use("/api/op", opRouter);
 
 // 404 JSON consistente para /api/*.
 app.use("/api", (_req, res) => res.status(404).json({ error: "Ruta no encontrada." }));
@@ -46,5 +72,5 @@ app.use("/api", (_req, res) => res.status(404).json({ error: "Ruta no encontrada
 app.use(errorHandler);
 
 app.listen(env.PORT, () => {
-  console.log(`mapa-backend escuchando en :${env.PORT} (driver=${env.DB_DRIVER})`);
+  console.log(`mapa-backend escuchando en :${env.PORT}`);
 });

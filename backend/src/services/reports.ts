@@ -1,0 +1,248 @@
+/**
+ * Service de reportes de emergencia. La LÓGICA y las consultas Drizzle viven
+ * aquí (no en el route). Portado desde lib/store.ts del app Next previo,
+ * preservando el comportamiento EXACTO y el MISMO contrato de salida
+ * (EmergencyReport) que el frontend ya consume.
+ *
+ * Diferencia con el app previo: el backend SIEMPRE tiene DATABASE_URL (validado
+ * en config/env), así que el fallback en-memoria / `hasDbEnv()` desaparece —
+ * la persistencia es obligatoria, como ya lo forzaba addReport bajo VERCEL.
+ *
+ * Fotos: la columna `photo` está SOBRECARGADA (URL de R2 si está configurado, o
+ * data-URL base64 si no). NUNCA se expone cruda; el DTO solo deriva `photoUrl`
+ * (la ruta /api/reports/:id/photo), igual que antes.
+ */
+import { desc, eq, sql } from "drizzle-orm";
+import { getDb, schema } from "@/db";
+import { isR2Configured, uploadPhotoDataUrl } from "@/lib/r2";
+import { isAllowedImageDataUrl, parseImageDataUri } from "@/lib/image";
+
+const { reports } = schema;
+
+export type ReportType =
+  | "critical"
+  | "supplies"
+  | "shelter"
+  | "nopower"
+  | "missing"
+  | "building"
+  | "starlink";
+
+/** Tipos válidos de marcador (orden = el del app previo en lib/types.ts). */
+export const REPORT_TYPE_KEYS: ReportType[] = [
+  "critical",
+  "supplies",
+  "shelter",
+  "nopower",
+  "missing",
+  "building",
+  "starlink",
+];
+
+/** Límite del data URL de la foto (~1.4 MB en base64 ≈ 1 MB de imagen). */
+export const MAX_REPORT_PHOTO_CHARS = 1_400_000;
+
+/** DTO público (allowlist explícita; idéntico a EmergencyReport del frontend). */
+export interface ReportDTO {
+  id: string;
+  type: ReportType;
+  lat: number;
+  lng: number;
+  place: string;
+  affected: number;
+  needs: string;
+  /** URL del endpoint que sirve la foto si el reporte tiene una, o null. */
+  photoUrl: string | null;
+  /** Cantidad de confirmaciones por terceros. */
+  confirmations: number;
+  createdAt: number;
+}
+
+export interface CreateReportInput {
+  type: ReportType;
+  lat: number;
+  lng: number;
+  place: string;
+  affected?: number;
+  needs?: string;
+  photo?: string | null;
+}
+
+export interface PhotoData {
+  contentType: string;
+  buffer: Buffer;
+}
+/** Foto alojada en R2/CDN: el endpoint redirige en vez de servir bytes. */
+export interface RemotePhoto {
+  redirectTo: string;
+}
+
+/** ¿Es un data-URL de imagen permitido y bien formado? (allowlist M-6). */
+export const isValidPhotoDataUrl = isAllowedImageDataUrl;
+
+/** El backend siempre persiste (DATABASE_URL es obligatorio). */
+export function isPersistent(): boolean {
+  return true;
+}
+
+/**
+ * Normaliza el input a la fila a insertar + DTO. Misma lógica que createReport()
+ * de lib/store.ts: recorta place/needs, clamp de affected, valida foto.
+ */
+function createReport(input: CreateReportInput): {
+  report: ReportDTO;
+  photo: string | null;
+} {
+  const type = REPORT_TYPE_KEYS.includes(input.type) ? input.type : "critical";
+  const id = crypto.randomUUID();
+  const photo =
+    typeof input.photo === "string" &&
+    input.photo &&
+    isValidPhotoDataUrl(input.photo) &&
+    input.photo.length <= MAX_REPORT_PHOTO_CHARS
+      ? input.photo
+      : null;
+  return {
+    photo,
+    report: {
+      id,
+      type,
+      lat: Number(input.lat),
+      lng: Number(input.lng),
+      place: input.place.trim().slice(0, 200),
+      affected: Math.max(0, Math.trunc(Number(input.affected) || 0)),
+      needs: (input.needs ?? "").trim().slice(0, 1000),
+      photoUrl: photo ? `/api/reports/${id}/photo` : null,
+      confirmations: 0,
+      createdAt: Date.now(),
+    },
+  };
+}
+
+/**
+ * Lista los reportes (máximo 500, más recientes primero). Selecciona un booleano
+ * `hasPhoto` en vez de exponer la columna `photo` completa, igual que antes.
+ */
+export async function listReports(): Promise<ReportDTO[]> {
+  const db = await getDb();
+  const rows = await db
+    .select({
+      id: reports.id,
+      type: reports.type,
+      lat: reports.lat,
+      lng: reports.lng,
+      place: reports.place,
+      affected: reports.affected,
+      needs: reports.needs,
+      hasPhoto: sql<boolean>`${reports.photo} IS NOT NULL`,
+      confirmations: reports.confirmations,
+      createdAt: reports.createdAt,
+    })
+    .from(reports)
+    .orderBy(desc(reports.createdAt))
+    .limit(500);
+  return rows.map((row) => ({
+    id: row.id,
+    type: row.type as ReportType,
+    lat: Number(row.lat),
+    lng: Number(row.lng),
+    place: row.place,
+    affected: Number(row.affected),
+    needs: row.needs,
+    photoUrl: row.hasPhoto ? `/api/reports/${row.id}/photo` : null,
+    confirmations: Number(row.confirmations ?? 0),
+    createdAt: Number(row.createdAt),
+  }));
+}
+
+/**
+ * Crea y persiste un reporte. Si R2 está configurado, la foto va al CDN y se
+ * guarda la URL (no base64); hard-fail si la subida falla (el error sube y el
+ * endpoint no confirma). Devuelve el DTO con photoUrl derivada.
+ */
+export async function addReport(input: CreateReportInput): Promise<ReportDTO> {
+  const { report, photo } = createReport(input);
+  let stored = photo;
+  let migratedAt: number | null = null;
+  if (photo && isR2Configured()) {
+    stored = await uploadPhotoDataUrl(photo, "reports", report.id);
+    migratedAt = Date.now();
+  }
+  const db = await getDb();
+  await db.insert(reports).values({
+    id: report.id,
+    type: report.type,
+    lat: report.lat,
+    lng: report.lng,
+    place: report.place,
+    affected: report.affected,
+    needs: report.needs,
+    photo: stored,
+    photoMigratedAt: migratedAt,
+    createdAt: report.createdAt,
+  });
+  return report;
+}
+
+/**
+ * Devuelve la foto de un reporte: bytes decodificados (data-URL en DB) o una
+ * redirección al CDN (foto migrada a R2). null si no hay foto. Misma lógica que
+ * getReportPhoto() de lib/store.ts.
+ */
+export async function getReportPhoto(
+  id: string,
+): Promise<PhotoData | RemotePhoto | null> {
+  const db = await getDb();
+  const rows = await db
+    .select({ photo: reports.photo })
+    .from(reports)
+    .where(eq(reports.id, id));
+  const dataUrl = rows[0]?.photo ?? null;
+  if (!dataUrl) return null;
+  // Foto migrada a R2: `photo` es una URL del CDN → redirigir en vez de bytes.
+  if (/^https?:\/\//i.test(dataUrl)) return { redirectTo: dataUrl };
+  // Parser central: rechaza subtipos no permitidos (svg/gif) (audit M-6).
+  const parsed = parseImageDataUri(dataUrl);
+  if (!parsed) return null;
+  return { contentType: parsed.contentType, buffer: parsed.bytes };
+}
+
+/**
+ * Confirma un reporte deduplicando por hash de IP. Devuelve el nuevo total de
+ * confirmaciones, o `null` si esa IP ya había confirmado (dedup). Una sola
+ * sentencia atómica (CTE INSERT ... ON CONFLICT DO NOTHING + UPDATE), portada
+ * exactamente desde lib/store.ts.
+ */
+export async function confirmReport(
+  id: string,
+  ipKey: string,
+): Promise<number | null> {
+  const db = await getDb();
+  const res = (await db.execute(sql`
+    WITH ins AS (
+      INSERT INTO report_confirmations (report_id, ip_hash, created_at)
+      VALUES (${id}, ${ipKey}, ${Date.now()})
+      ON CONFLICT DO NOTHING
+      RETURNING report_id
+    )
+    UPDATE reports r SET confirmations = confirmations + 1
+    FROM ins WHERE r.id = ins.report_id
+    RETURNING r.confirmations
+  `)) as unknown;
+  const rows = (Array.isArray(res) ? res : (res as { rows: unknown[] }).rows) as
+    | { confirmations: number }[]
+    | undefined;
+  return rows && rows[0] ? Number(rows[0].confirmations) : null;
+}
+
+/** Elimina un reporte (marcar como atendido). True si existía. */
+export async function removeReport(id: string): Promise<boolean> {
+  const db = await getDb();
+  // `.returning()` tiene overloads incompatibles entre los dos drivers; usamos
+  // el escape `sql`, igual que en lib/store.ts.
+  const res = (await db.execute(
+    sql`DELETE FROM ${reports} WHERE ${reports.id} = ${id} RETURNING id`,
+  )) as unknown;
+  const rows = (Array.isArray(res) ? res : (res as { rows: unknown[] }).rows) as unknown[];
+  return rows.length > 0;
+}

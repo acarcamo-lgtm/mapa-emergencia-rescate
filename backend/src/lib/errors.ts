@@ -22,4 +22,5 @@ export const notFound = (m = "No encontrado") => new HttpError(404, m);
 export const payloadTooLarge = (m: string) => new HttpError(413, m);
 export const tooManyRequests = (m: string, retryAfter = 30) =>
   new HttpError(429, m, { "Retry-After": String(retryAfter) });
+export const badGateway = (m: string) => new HttpError(502, m);
 export const serviceUnavailable = (m: string) => new HttpError(503, m);
