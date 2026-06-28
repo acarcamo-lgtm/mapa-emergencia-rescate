@@ -4,7 +4,18 @@ import SubPageShell from "../components/SubPageShell";
 export const metadata: Metadata = {
   title: "Registrarme como voluntario · Mapa de Emergencia Venezuela",
   alternates: { canonical: "/voluntario" },
-  description: "Ofrece tu tiempo en labores de rescate, apoyo logístico o asistencia médica.",
+  description: "Ofrece tu tiempo en labores de rescate, apoyo logístico o asistencia médica. Iniciativa ciudadana, independiente y no gubernamental.",
+  openGraph: {
+    title: "Registrarme como voluntario · Mapa de Emergencia Venezuela",
+    description: "Ofrece tu tiempo en labores de rescate, apoyo logístico o asistencia médica. Iniciativa ciudadana, independiente y no gubernamental.",
+    url: "/voluntario",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Registrarme como voluntario · Mapa de Emergencia Venezuela",
+    description: "Ofrece tu tiempo en labores de rescate, apoyo logístico o asistencia médica. Iniciativa ciudadana, independiente y no gubernamental.",
+  },
 };
 
 export default function VoluntarioPage() {

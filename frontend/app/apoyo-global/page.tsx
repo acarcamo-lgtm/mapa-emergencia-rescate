@@ -17,7 +17,20 @@ export const metadata: Metadata = {
   title: "Apoyo global · Mapa de Emergencia Venezuela",
   alternates: { canonical: "/apoyo-global" },
   description:
-    "Cómo sumarte desde el exterior: donaciones, organizaciones aliadas y formas de difundir la emergencia.",
+    "Recursos y ayuda internacional para apoyar la emergencia en Venezuela. Iniciativa ciudadana, independiente y no gubernamental.",
+  openGraph: {
+    title: "Apoyo global · Mapa de Emergencia Venezuela",
+    description:
+      "Recursos y ayuda internacional para apoyar la emergencia en Venezuela. Iniciativa ciudadana, independiente y no gubernamental.",
+    url: "/apoyo-global",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Apoyo global · Mapa de Emergencia Venezuela",
+    description:
+      "Recursos y ayuda internacional para apoyar la emergencia en Venezuela. Iniciativa ciudadana, independiente y no gubernamental.",
+  },
 };
 
 export default function ApoyoGlobalPage() {

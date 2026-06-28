@@ -6,8 +6,18 @@ import SubPageShell from "../components/SubPageShell";
 export const metadata: Metadata = {
   title: "Apoyo disponible · Mapa de Emergencia Venezuela",
   alternates: { canonical: "/apoyo-disponible" },
-  description:
-    "Directorio de apoyo durante el terremoto: psicológico, civil y rescate, transporte, discapacidad, mascotas y más. Contactos directos.",
+  description: "Directorio de apoyo durante el terremoto: psicológico, civil y rescate, transporte, discapacidad, mascotas y más. Contactos directos. Iniciativa ciudadana, independiente y no gubernamental.",
+  openGraph: {
+    title: "Apoyo disponible · Mapa de Emergencia Venezuela",
+    description: "Directorio de apoyo durante el terremoto: psicológico, civil y rescate, transporte, discapacidad, mascotas y más. Contactos directos. Iniciativa ciudadana, independiente y no gubernamental.",
+    url: "/apoyo-disponible",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Apoyo disponible · Mapa de Emergencia Venezuela",
+    description: "Directorio de apoyo durante el terremoto: psicológico, civil y rescate, transporte, discapacidad, mascotas y más. Contactos directos. Iniciativa ciudadana, independiente y no gubernamental.",
+  },
 };
 
 /** Convierte un número mostrado a un href tel: válido para marcar al tocarlo. */

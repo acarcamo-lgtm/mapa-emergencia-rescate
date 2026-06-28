@@ -28,11 +28,30 @@ async function fetchHospital(id: string): Promise<Hospital | null> {
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   const { id } = await params;
   const hospital = await fetchHospital(id);
+
   if (!hospital) return { title: "Hospital no encontrado · Mapa de Emergencia" };
+
+  // 1. Definimos las variables dinámicas con la frase obligatoria de cierre
+  const title = `${hospital.name} · Hospitales · Mapa de Emergencia Venezuela`;
+  const description = `Información, pacientes registrados y datos del ${hospital.name} en ${hospital.state}. Iniciativa ciudadana, independiente y no gubernamental.`;
+  const url = `/hospitales/${buildHospitalSlug(hospital)}`;
+
+  // 2. Retornamos la estructura completa que pide el Issue
   return {
-    title: `${hospital.name} · Hospitales · Mapa de Emergencia Venezuela`,
-    description: `Información, pacientes registrados y datos del ${hospital.name} en ${hospital.state}.`,
-    alternates: { canonical: `/hospitales/${buildHospitalSlug(hospital)}` },
+    title,
+    description,
+    alternates: { canonical: url },
+    openGraph: {
+      title,
+      description,
+      url,
+      type: "website",
+    },
+    twitter: {
+      card: "summary_large_image",
+      title,
+      description,
+    },
   };
 }
 
@@ -113,8 +132,16 @@ export default async function HospitalPage({ params }: PageProps) {
           )}
 
           <div className="mt-5 grid max-w-2xl grid-cols-2 gap-2 sm:grid-cols-3">
-            <Stat label="Hospitalizados" value={hospital.activePatients} accent="#1d4ed8" />
-            <Stat label="Total pacientes" value={hospital.totalPatients} accent="#0f172a" />
+            <Stat
+              label="Hospitalizados"
+              value={hospital.activePatients}
+              accent="#1d4ed8"
+            />
+            <Stat
+              label="Total pacientes"
+              value={hospital.totalPatients}
+              accent="#0f172a"
+            />
             <Stat label="Zona" value={zone.label} accent={zone.color} />
           </div>
         </div>

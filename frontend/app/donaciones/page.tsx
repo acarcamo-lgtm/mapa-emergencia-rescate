@@ -6,7 +6,18 @@ import OfertasList from "./OfertasList";
 export const metadata: Metadata = {
   title: "Donaciones · Mapa de Emergencia Venezuela",
   alternates: { canonical: "/donaciones" },
-  description: "Dona dinero, sangre o insumos a organizaciones verificadas que trabajan en el terreno.",
+  description: "Dona dinero, sangre o insumos a organizaciones verificadas que trabajan en el terreno. Iniciativa ciudadana, independiente y no gubernamental.",
+  openGraph: {
+    title: "Donaciones · Mapa de Emergencia Venezuela",
+    description: "Dona dinero, sangre o insumos a organizaciones verificadas que trabajan en el terreno. Iniciativa ciudadana, independiente y no gubernamental.",
+    url: "/donaciones",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Donaciones · Mapa de Emergencia Venezuela",
+    description: "Dona dinero, sangre o insumos a organizaciones verificadas que trabajan en el terreno. Iniciativa ciudadana, independiente y no gubernamental.",
+  },
 };
 
 export default function DonacionesPage() {

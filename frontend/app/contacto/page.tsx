@@ -6,7 +6,18 @@ import { CONTACT_EMAIL, contactMailto } from "@/lib/site";
 export const metadata: Metadata = {
   title: "Contacto · Mapa de Emergencia Venezuela",
   alternates: { canonical: "/contacto" },
-  description: `Escríbenos en ${CONTACT_EMAIL} o usa el formulario de contacto.`,
+  description: `Escríbenos en ${CONTACT_EMAIL} o usa el formulario de contacto. Iniciativa ciudadana, independiente y no gubernamental.`,
+  openGraph: {
+    title: "Contacto · Mapa de Emergencia Venezuela",
+    description: `Escríbenos en ${CONTACT_EMAIL} o usa el formulario de contacto. Iniciativa ciudadana, independiente y no gubernamental.`,
+    url: "/contacto",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Contacto · Mapa de Emergencia Venezuela",
+    description: `Escríbenos en ${CONTACT_EMAIL} o usa el formulario de contacto. Iniciativa ciudadana, independiente y no gubernamental.`,
+  },
 };
 
 export default function ContactoPage() {
