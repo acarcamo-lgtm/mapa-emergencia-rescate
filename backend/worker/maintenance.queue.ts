@@ -140,11 +140,11 @@ export async function registerMaintenanceSchedulers(): Promise<void> {
 const processor: Processor = async (job) => {
   const data = job.data as MaintenanceJobData;
   if (data.kind === "geocode") {
-    const { runGeocode } = await import("@/lib/sync/geocode");
+    const { runGeocode } = await import("./sync/geocode");
     return runGeocode({ maxLocations: data.maxLocations });
   }
   if (data.kind === "duplicates") {
-    const { buildDuplicateReport } = await import("@/lib/sync/dedup");
+    const { buildDuplicateReport } = await import("./sync/dedup");
     return buildDuplicateReport({
       source: data.source,
       limitGroups: data.limitGroups,

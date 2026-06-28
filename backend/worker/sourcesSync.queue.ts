@@ -98,7 +98,7 @@ export async function getSyncJobState(jobId: string): Promise<{
  * del worker). Reemplaza el cron de Vercel.
  */
 export async function registerSourceSchedulers(): Promise<void> {
-  const { enabledSources } = await import("@/lib/sync/sources");
+  const { enabledSources } = await import("./sync/sources");
   const q = queue();
   const sources = enabledSources();
   for (const s of sources) {
@@ -120,9 +120,9 @@ export async function registerSourceSchedulers(): Promise<void> {
 const processor: Processor = async (job) => {
   const { sourceId, mode, dryRun, limit, pagesPerRun } = job.data as SyncJobData;
   // Lazy import: mantiene el módulo de cola ligero para el bundle del app.
-  const { runSync, runSyncChunked } = await import("@/lib/sync/engine");
-  const { getSource } = await import("@/lib/sync/sources");
-  const { recordSyncRun } = await import("@/lib/sync/state");
+  const { runSync, runSyncChunked } = await import("./sync/engine");
+  const { getSource } = await import("./sync/sources");
+  const { recordSyncRun } = await import("./sync/state");
 
   const adapter = getSource(sourceId);
   if (!adapter) throw new Error(`Fuente desconocida: ${sourceId}`);
