@@ -3,7 +3,7 @@
 import dynamic from "next/dynamic";
 import type { EmergencyReport, ReportType } from "@/lib/types";
 import type { MissingMapMarker } from "@/hooks/missing";
-import type { MapBounds } from "@/app/components/MapView";
+import type { MapBounds } from "@/components/features/map";
 import AddressSearch, {
   type GeocodeResult,
 } from "@/app/components/AddressSearch";
@@ -11,7 +11,7 @@ import FilterChips from "./FilterChips";
 
 // Mapa Leaflet: pesado + depende de window. next/dynamic ssr:false lo saca del
 // bundle inicial y lo carga en cliente solo cuando esta vista se monta.
-const MapView = dynamic(() => import("@/app/components/MapView"), {
+const MapView = dynamic(() => import("@/components/features/map"), {
   ssr: false,
   loading: () => (
     <div className="flex h-full w-full items-center justify-center bg-slate-100 text-slate-500">

@@ -20,7 +20,7 @@ import { useHospitalGridColumns } from "./useHospitalGridColumns";
 
 // Overlay de detalle pesado: code-split, solo carga al tocar un hospital.
 const HospitalDetailOverlay = dynamic(
-  () => import("@/app/components/Hospitals").then((m) => m.HospitalDetailOverlay),
+  () => import("@/components/features/hospitals/HospitalDetailOverlay"),
   { ssr: false },
 );
 

@@ -2,7 +2,7 @@ import dynamic from "next/dynamic";
 import type { Metadata } from "next";
 import SubPageShell from "@/app/components/SubPageShell";
 
-const Hospitals = dynamic(() => import("@/app/components/Hospitals"), {
+const Hospitals = dynamic(() => import("@/components/features/hospitals"), {
   loading: () => (
     <section className="mx-auto w-full max-w-7xl px-4 py-10 text-sm text-slate-500">
       Cargando hospitales…
