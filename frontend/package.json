@@ -18,8 +18,7 @@
     "hub:backfill": "node --import tsx worker/hub-backfill.ts",
     "db:generate": "drizzle-kit generate --config infra/db/drizzle.config.ts",
     "test": "vitest run",
-    "test:watch": "vitest",
-    "prepare": "husky"
+    "test:watch": "vitest"
   },
   "engines": {
     "node": ">=24"
@@ -56,15 +55,10 @@
     "drizzle-kit": "^0.31.10",
     "eslint": "^9",
     "eslint-config-next": "16.2.9",
-    "husky": "9.1.7",
-    "lint-staged": "17.0.8",
     "tailwindcss": "^4",
     "tsx": "^4.19.2",
     "typescript": "^5",
     "vitest": "^4.1.9"
-  },
-  "lint-staged": {
-    "*.{ts,tsx,mjs,js}": "eslint --fix"
   },
   "overrides": {
     "postcss": "^8.5.10"
