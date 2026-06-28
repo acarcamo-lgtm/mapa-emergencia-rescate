@@ -13,12 +13,14 @@ import { asyncHandler, rateLimit, requireAdmin, validate } from "@/middleware";
 import { serviceUnavailable } from "@/lib/errors";
 import * as adminSvc from "@/services/admin";
 import * as donationsSvc from "@/services/donations";
+import * as contactSvc from "@/services/contact";
 
 export const adminRouter = Router();
 
 const NO_STORE = { "Cache-Control": "no-store" };
 
 const loginBody = z.object({ password: z.string().optional() });
+const markReadBody = z.object({ id: z.string().min(1, "Falta id del mensaje.") });
 
 /**
  * @swagger
@@ -108,5 +110,54 @@ adminRouter.get(
     } catch {
       throw serviceUnavailable("No se pudieron cargar las donaciones.");
     }
+  }),
+);
+
+/**
+ * @swagger
+ * /api/admin/contact:
+ *   get:
+ *     tags: [admin]
+ *     summary: Lista mensajes de contacto + estadísticas (requiere admin)
+ *     responses:
+ *       200: { description: Mensajes y stats. }
+ *       401: { description: No autorizado. }
+ *       503: { description: No se pudieron cargar los mensajes. }
+ *   patch:
+ *     tags: [admin]
+ *     summary: Marca un mensaje de contacto como leído (requiere admin)
+ *     responses:
+ *       200: { description: ok. }
+ *       400: { description: Falta id. }
+ *       404: { description: Mensaje no encontrado. }
+ */
+adminRouter.get(
+  "/contact",
+  requireAdmin,
+  asyncHandler(async (_req, res) => {
+    try {
+      const [stats, messages] = await Promise.all([
+        contactSvc.getContactStats(),
+        contactSvc.listContactMessages(),
+      ]);
+      res.set(NO_STORE).json({ generatedAt: Date.now(), stats, messages });
+    } catch {
+      throw serviceUnavailable("No se pudieron cargar los mensajes.");
+    }
+  }),
+);
+
+adminRouter.patch(
+  "/contact",
+  requireAdmin,
+  validate({ body: markReadBody }),
+  asyncHandler(async (req, res) => {
+    const { id } = req.body as z.infer<typeof markReadBody>;
+    const ok = await contactSvc.markContactMessageRead(id);
+    if (!ok) {
+      res.status(404).json({ error: "Mensaje no encontrado." });
+      return;
+    }
+    res.json({ ok: true });
   }),
 );

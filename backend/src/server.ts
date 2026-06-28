@@ -43,8 +43,22 @@ app.use((req, res, next) => {
   next();
 });
 
-// Límite de body por defecto; las rutas con foto suben su propio límite.
-app.use(express.json({ limit: "256kb" }));
+// Parser JSON por defecto (256kb). CRÍTICO: NO debe correr en las rutas que
+// aceptan fotos base64 (~1.4MB) — esas montan su propio express.json(2mb) a nivel
+// de ruta. Si el parser global corriera primero, consumiría el stream y cortaría
+// el body a 256kb antes de que el parser de 2mb lo viera (413 en POST con foto).
+// Por eso lo saltamos en los paths de creación con foto.
+const PHOTO_POST_PATHS = [
+  "/api/missing",
+  "/api/reports",
+];
+const globalJson = express.json({ limit: "256kb" });
+app.use((req, res, next) => {
+  // Solo saltamos el POST exacto a esos paths (sus subrutas GET /:id/photo no
+  // tienen body). El parser de 2mb de la ruta se encarga.
+  if (req.method === "POST" && PHOTO_POST_PATHS.includes(req.path)) return next();
+  return globalJson(req, res, next);
+});
 
 // Healthcheck para el LB de k8s (readinessProbe).
 app.get("/api/readyz", (_req, res) => res.json({ ok: true }));
