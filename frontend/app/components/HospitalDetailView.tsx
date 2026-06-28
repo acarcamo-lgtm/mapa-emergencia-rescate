@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { apiFetch } from "@/lib/api";
 import {
   buildHospitalSlug,
   HOSPITAL_SUPPLY_CATEGORY_META,
@@ -58,10 +59,10 @@ export default function HospitalDetailView({
     if (manual) setRefreshing(true);
     try {
       const [res, supplyRes] = await Promise.all([
-        fetch(`/api/hospitals/${hospitalIdRef.current}/patients`, {
+        apiFetch(`/api/hospitals/${hospitalIdRef.current}/patients`, {
           cache: "no-store",
         }),
-        fetch(`/api/hospitals/${hospitalIdRef.current}/supplies`, {
+        apiFetch(`/api/hospitals/${hospitalIdRef.current}/supplies`, {
           cache: "no-store",
         }),
       ]);
@@ -100,7 +101,7 @@ export default function HospitalDetailView({
   async function handleDelete(id: string) {
     if (!adminToken) return;
     if (!confirm("¿Eliminar este paciente?")) return;
-    const res = await fetch(
+    const res = await apiFetch(
       `/api/hospitals/${hospital.id}/patients/${id}`,
       {
         method: "DELETE",

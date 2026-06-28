@@ -13,7 +13,7 @@ import AdminLogin from "./AdminLogin";
 import AddressSearch, { type GeocodeResult } from "./AddressSearch";
 import { useLowBandwidthMode } from "./useLowBandwidthMode";
 import { distanceMeters, freshnessClass, timeAgo } from "@/lib/format";
-import { mediaUrl } from "@/lib/api";
+import { apiFetch, mediaUrl } from "@/lib/api";
 import {
 	EDIFICIOS_COUNT,
 	EDIFICIOS_SOURCE_LABEL,
@@ -82,7 +82,7 @@ async function postReportToServer(
 ): Promise<SubmitOutcome> {
 	let res: Response;
 	try {
-		res = await fetch("/api/reports", {
+		res = await apiFetch("/api/reports", {
 			method: "POST",
 			headers: { "Content-Type": "application/json" },
 			// El token de Turnstile es de un solo uso: viaja en el POST pero NO se
@@ -222,7 +222,7 @@ export default function EmergencyApp() {
 			// no-cache (no no-store): el navegador revalida con If-None-Match y, si
 			// nada cambió, recibe un 304 vacío y reusa el body cacheado (ahorra ancho
 			// de banda y parseo bajo polling). El res.json() sigue funcionando igual.
-			const res = await fetch("/api/reports", { cache: "no-cache" });
+			const res = await apiFetch("/api/reports", { cache: "no-cache" });
 			if (!res.ok) return;
 			const data = await res.json();
 			setReports(data.reports ?? []);
@@ -238,7 +238,7 @@ export default function EmergencyApp() {
 			const qs = b
 				? `?north=${b.north}&south=${b.south}&east=${b.east}&west=${b.west}&limit=800`
 				: "?limit=800";
-			const res = await fetch(`/api/missing/map${qs}`, { cache: "no-cache" });
+			const res = await apiFetch(`/api/missing/map${qs}`, { cache: "no-cache" });
 			if (!res.ok) return;
 			const data = await res.json();
 			setMissingMapMarkers(data.markers ?? []);
@@ -276,7 +276,7 @@ export default function EmergencyApp() {
 					r.id === id ? { ...r, confirmations: r.confirmations + 1 } : r,
 				),
 			);
-			const res = await fetch(`/api/reports/${id}/confirm`, {
+			const res = await apiFetch(`/api/reports/${id}/confirm`, {
 				method: "POST",
 			}).catch(() => null);
 			if (res && (res.status === 409 || !res.ok)) {
@@ -569,7 +569,7 @@ export default function EmergencyApp() {
 			}
 			const previous = reports;
 			setReports((prev) => prev.filter((r) => r.id !== id));
-			const res = await fetch(`/api/reports/${id}`, {
+			const res = await apiFetch(`/api/reports/${id}`, {
 				method: "DELETE",
 				headers: { "x-admin-token": adminToken },
 			}).catch(() => null);

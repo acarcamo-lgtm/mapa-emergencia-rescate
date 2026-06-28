@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { psychologyHelpUrl } from "@/lib/site";
+import { apiFetch } from "@/lib/api";
 import { trackEvent } from "./openpanel";
 
 function psychologyClickLabel(count: number): string {
@@ -19,7 +20,7 @@ export default function PsychologyHelpButton() {
 
   useEffect(() => {
     let cancelled = false;
-    fetch("/api/stats/psychology-help")
+    apiFetch("/api/stats/psychology-help")
       .then((res) => (res.ok ? res.json() : null))
       .then((data: { count?: number } | null) => {
         if (!cancelled && typeof data?.count === "number") {
@@ -37,7 +38,7 @@ export default function PsychologyHelpButton() {
       destination: psychologyIsExternal ? "external" : "mailto",
       source: "header",
     });
-    fetch("/api/stats/psychology-help", {
+    apiFetch("/api/stats/psychology-help", {
       method: "POST",
       keepalive: true,
     })

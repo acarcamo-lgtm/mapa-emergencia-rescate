@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { apiFetch } from "@/lib/api";
 
 interface AdminLoginProps {
   onCancel: () => void;
@@ -17,7 +18,7 @@ export default function AdminLogin({ onCancel, onSuccess }: AdminLoginProps) {
     setError(null);
     setSubmitting(true);
     try {
-      const res = await fetch("/api/admin/login", {
+      const res = await apiFetch("/api/admin/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ password }),

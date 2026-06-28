@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { apiFetch } from "@/lib/api";
 
 interface ContactLine {
   type: "phone" | "email" | "web" | "hours";
@@ -2077,7 +2078,7 @@ export default function InternationalHelp() {
       const fallback = getBrowserCountryCode();
 
       try {
-        const response = await fetch("/api/geo", { cache: "no-store" });
+        const response = await apiFetch("/api/geo", { cache: "no-store" });
         const data = (await response.json()) as { countryCode?: string };
         const code = data.countryCode ?? fallback;
 

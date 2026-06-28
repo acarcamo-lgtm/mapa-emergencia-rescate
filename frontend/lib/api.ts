@@ -38,6 +38,17 @@ function resolveUrl(path: string): string {
 }
 
 /**
+ * Resuelve una ruta relativa de la API a una URL absoluta contra `API_BASE`.
+ * Útil cuando un consumidor necesita construir la URL manualmente (p.ej. para
+ * `<script src>`, `<img src>` arbitrario, o pasársela a una librería externa).
+ * Se exporta también como sinónimo público de `resolveUrl`. Acepta URLs ya
+ * absolutas y las devuelve intactas.
+ */
+export function apiUrl(path: string): string {
+  return resolveUrl(path);
+}
+
+/**
  * Resuelve una URL de media (fotos) servida por el backend. El backend devuelve
  * rutas RELATIVAS (`/api/missing/:id/photo`) que, en un `<img src>`, el browser
  * resolvería contra el origen de la PÁGINA (:3000) en vez del backend (:8080) →
@@ -109,5 +120,25 @@ export function apiSend<T>(
       ...headers,
     },
     body: body !== undefined ? JSON.stringify(body) : undefined,
+  });
+}
+
+/**
+ * Wrapper de `fetch` que ancla la URL a `API_BASE` y agrega `credentials:"include"`
+ * por defecto. Devuelve el `Response` crudo SIN parsear (a diferencia de
+ * `apiGet`/`apiSend`) — pensado para casos donde el caller necesita revisar el
+ * status, leer el body como texto, o pasar headers customizados como
+ * `x-admin-token` sin tipar la respuesta.
+ *
+ * Acepta paths relativos (`/api/...`) o URLs absolutas (se dejan intactas).
+ * NO aplica timeout propio: si lo necesitas, pásalo en `init.signal`.
+ */
+export function apiFetch(
+  path: string,
+  init: RequestInit = {},
+): Promise<Response> {
+  return fetch(resolveUrl(path), {
+    credentials: "include",
+    ...init,
   });
 }

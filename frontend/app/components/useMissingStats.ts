@@ -13,6 +13,7 @@
  * primer suscriptor y se detiene con el último; se pausa con la pestaña oculta.
  */
 import { useSyncExternalStore } from "react";
+import { apiFetch } from "@/lib/api";
 
 export interface MissingStats {
   active: number;
@@ -39,7 +40,7 @@ async function fetchOnce(): Promise<void> {
   if (inFlight) return inFlight;
   inFlight = (async () => {
     try {
-      const res = await fetch("/api/missing/stats", { cache: "no-cache" });
+      const res = await apiFetch("/api/missing/stats", { cache: "no-cache" });
       if (!res.ok) return;
       const data = await res.json();
       const s = data?.stats;

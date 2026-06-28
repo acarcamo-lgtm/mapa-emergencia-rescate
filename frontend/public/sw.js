@@ -11,9 +11,16 @@
  *    manifest, etc.): cache-first.
  *  - APIs JSON (/api/...): siempre network; si falla, devolvemos lo último
  *    cacheado por GET. No interceptamos POST/DELETE.
+ *
+ * Hosts cross-origin de la API:
+ *  El backend vive en api.<dominio> (subdominio dedicado, ver middleware.ts y
+ *  NEXT_PUBLIC_API_URL). El SW intercepta las peticiones GET al host API igual
+ *  que a las same-origin `/api/...` (necesario para mantener network-first con
+ *  fallback offline). Las respuestas vienen con CORS habilitado, así que la
+ *  Cache API las puede guardar sin restricciones de "opaque response".
  */
 
-const CACHE_VERSION = "v3";
+const CACHE_VERSION = "v4";
 const STATIC_CACHE = `static-${CACHE_VERSION}`;
 const PHOTO_CACHE = `photos-${CACHE_VERSION}`;
 const TILE_CACHE = `tiles-${CACHE_VERSION}`;
@@ -34,11 +41,10 @@ const CORE_ASSETS = [
   "/manifest.webmanifest",
 ];
 const CORE_PAGES = ["/", "/privacidad"];
-const CORE_API_SNAPSHOTS = [
-  "/api/reports",
-  "/api/missing",
-  "/api/missing?status=found",
-];
+// El precache de snapshots `/api/...` se eliminó al mover el backend a
+// `api.<dominio>` (cross-origin): `cache.addAll` con una URL cross-origin sin
+// CORS configurado falla y aborta el install. El `networkFirst` posterior se
+// encarga de poblar el API cache con la primera respuesta real desde la app.
 // Página de último recurso: se muestra solo si ni siquiera hay un "/" cacheado
 // (caché fría o desalojada). Lleva embebidos los teléfonos de emergencia
 // universales para que SIEMPRE haya números a la mano sin conexión.
@@ -61,9 +67,6 @@ self.addEventListener("install", (event) => {
       caches
         .open(HTML_CACHE)
         .then((cache) => cache.addAll(CORE_PAGES).catch(() => {})),
-      caches
-        .open(API_CACHE)
-        .then((cache) => cache.addAll(CORE_API_SNAPSHOTS).catch(() => {})),
     ])
       .then(() => self.skipWaiting()),
   );
@@ -88,6 +91,18 @@ function isPhotoApi(url) {
   ) || (
     url.pathname.startsWith("/api/reports/") && url.pathname.endsWith("/photo")
   );
+}
+
+// Reconoce las peticiones que apuntan a la superficie `/api/...`, sea en el
+// mismo origen (dev/legado) o en el subdominio API cross-origin
+// (`api.<dominio>`, p.ej. `api.terremotovenezuela.app`). Espejo de la heurística
+// de `frontend/middleware.ts` para mantener un solo criterio de "esto es API".
+function isApiRequest(url) {
+  if (!url.pathname.startsWith("/api/")) return false;
+  const sameOrigin = url.origin === self.location.origin;
+  if (sameOrigin) return true;
+  // Cross-origin: solo si el host empieza con `api.` (puerto incluido).
+  return url.host.startsWith("api.");
 }
 
 async function cacheFirst(request, cacheName) {
@@ -171,17 +186,19 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // Solo manejamos same-origin y tiles de OSM más abajo.
+  // Resto: manejamos same-origin (assets/tiles) y el subdominio API cross-origin.
   const sameOrigin = url.origin === self.location.origin;
+  const apiRequest = isApiRequest(url);
 
   // 2. Fotos de reportes/desaparecidos: cache-first (no cambian).
-  if (sameOrigin && isPhotoApi(url)) {
+  if (apiRequest && isPhotoApi(url)) {
     event.respondWith(cacheFirst(request, PHOTO_CACHE));
     return;
   }
 
-  // 3. APIs JSON: network-first con cache de respaldo.
-  if (sameOrigin && url.pathname.startsWith("/api/")) {
+  // 3. APIs JSON: network-first con cache de respaldo (incluye el host API
+  //    cross-origin, ver `isApiRequest`).
+  if (apiRequest) {
     event.respondWith(networkFirst(request, API_CACHE));
     return;
   }

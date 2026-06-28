@@ -9,6 +9,7 @@ import {
 } from "@/lib/types";
 import AdminLogin from "../components/AdminLogin";
 import { formatDonationUsd } from "@/lib/donation-shared";
+import { apiFetch } from "@/lib/api";
 import HospitalSuppliesPanel from "./HospitalSuppliesPanel";
 
 const ADMIN_STORAGE_KEY = "emergency:adminToken";
@@ -280,7 +281,7 @@ export default function AdminDashboard() {
     const current = sessionStorage.getItem(ADMIN_STORAGE_KEY);
     if (!current) return;
     try {
-      const res = await fetch("/api/admin/data", {
+      const res = await apiFetch("/api/admin/data", {
         headers: { "x-admin-token": current },
         cache: "no-store",
       });
@@ -301,7 +302,7 @@ export default function AdminDashboard() {
     const current = sessionStorage.getItem(ADMIN_STORAGE_KEY);
     if (!current) return;
     try {
-      const res = await fetch("/api/admin/donations", {
+      const res = await apiFetch("/api/admin/donations", {
         headers: { "x-admin-token": current },
         cache: "no-store",
       });
@@ -322,7 +323,7 @@ export default function AdminDashboard() {
     const current = sessionStorage.getItem(ADMIN_STORAGE_KEY);
     if (!current) return;
     try {
-      const res = await fetch("/api/admin/contact", {
+      const res = await apiFetch("/api/admin/contact", {
         headers: { "x-admin-token": current },
         cache: "no-store",
       });
@@ -342,7 +343,7 @@ export default function AdminDashboard() {
   // Conteos de la federación (público, sin PII): no necesita token.
   const fetchHubStats = useCallback(async () => {
     try {
-      const res = await fetch("/api/hub/stats", { cache: "no-store" });
+      const res = await apiFetch("/api/hub/stats", { cache: "no-store" });
       if (!res.ok) return;
       setHubStats(await res.json());
     } catch {
@@ -445,7 +446,7 @@ export default function AdminDashboard() {
           ),
         };
       });
-      await fetch("/api/admin/contact", {
+      await apiFetch("/api/admin/contact", {
         method: "PATCH",
         headers: {
           "x-admin-token": current,
@@ -474,7 +475,7 @@ export default function AdminDashboard() {
           return { ...prev, messages: prev.messages.filter((m) => m.id !== id) };
         return { ...prev, people: prev.people.filter((p) => p.id !== id) };
       });
-      await fetch(endpoint, {
+      await apiFetch(endpoint, {
         method: "DELETE",
         headers: { "x-admin-token": token },
       }).catch(() => {});
@@ -487,7 +488,7 @@ export default function AdminDashboard() {
     if (!current || syncing) return;
     setSyncing(true);
     try {
-      await fetch("/api/sync/run?mode=chunk", {
+      await apiFetch("/api/sync/run?mode=chunk", {
         method: "POST",
         headers: { "x-admin-token": current },
       });
@@ -506,7 +507,7 @@ export default function AdminDashboard() {
       return;
     }
     try {
-      await fetch("/api/sync/reset", {
+      await apiFetch("/api/sync/reset", {
         method: "POST",
         headers: { "x-admin-token": current },
       });
@@ -523,7 +524,7 @@ export default function AdminDashboard() {
     try {
       // El reporte ya no corre inline (audit M-2): se encola y se hace
       // status-poll hasta que termina (patrón Hermes/boahaus 202 + poll).
-      const enq = await fetch("/api/sync/duplicates?limit=50", {
+      const enq = await apiFetch("/api/sync/duplicates?limit=50", {
         method: "POST",
         headers: { "x-admin-token": current },
         cache: "no-store",
@@ -536,7 +537,7 @@ export default function AdminDashboard() {
       const deadline = Date.now() + 90_000;
       while (Date.now() < deadline) {
         await new Promise((r) => setTimeout(r, 1500));
-        const sres = await fetch(
+        const sres = await apiFetch(
           `/api/sync/status?jobId=${encodeURIComponent(jobId)}`,
           { headers: { "x-admin-token": current }, cache: "no-store" },
         );
@@ -1236,7 +1237,7 @@ export default function AdminDashboard() {
                           <button
                             type="button"
                             onClick={async () => {
-                              await fetch(`/api/missing/${p.id}/restore`, {
+                              await apiFetch(`/api/missing/${p.id}/restore`, {
                                 method: "POST",
                                 headers: { "x-admin-token": token },
                               }).catch(() => null);

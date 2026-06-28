@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { apiFetch } from "@/lib/api";
 import {
   HOSPITAL_SUPPLY_CATEGORIES,
   HOSPITAL_SUPPLY_CATEGORY_META,
@@ -110,7 +111,7 @@ export default function HospitalSuppliesPanel({ token, query }: Props) {
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    const res = await fetch("/api/admin/hospital-supplies", {
+    const res = await apiFetch("/api/admin/hospital-supplies", {
       headers: { "x-admin-token": token },
       cache: "no-store",
     });
@@ -163,7 +164,7 @@ export default function HospitalSuppliesPanel({ token, query }: Props) {
   );
 
   async function postJson(path: string, body: Record<string, unknown>, method = "POST") {
-    const res = await fetch(path, {
+    const res = await apiFetch(path, {
       method,
       headers: {
         "Content-Type": "application/json",

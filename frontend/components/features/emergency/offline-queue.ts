@@ -12,6 +12,7 @@
  * El flush/retry (online event + intervalo) vive en el contenedor; usa estas
  * funciones. No es una mutación de TanStack a propósito.
  */
+import { apiFetch } from "@/lib/api";
 import {
   countPending,
   enqueueReport,
@@ -45,7 +46,7 @@ export async function postReportToServer(
 ): Promise<SubmitOutcome> {
   let res: Response;
   try {
-    res = await fetch("/api/reports", {
+    res = await apiFetch("/api/reports", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
