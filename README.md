@@ -17,7 +17,7 @@ asíncrono. Pensada para alto tráfico y para funcionar bien en móvil.
 
 ## Diseño
 
-El sistema visual vive en [`design/DESIGN.md`](design/DESIGN.md). Sigue el
+El sistema visual vive en [`docs/design/DESIGN.md`](docs/design/DESIGN.md). Sigue el
 formato DESIGN.md de Google para combinar tokens de diseño con criterios
 humanos de uso, y debe revisarse antes de cambios visuales en la interfaz
 pública.

@@ -11,7 +11,7 @@ las reglas que un agente necesita antes de editar.
 - Si el cambio toca arquitectura, sincronización, datos o flujos públicos,
   revisa también `docs/README.md` y los ADR/RFC relacionados.
 - Si el cambio toca UI pública, estilos, layout, componentes visuales o copy de
-  experiencia, revisa `design/DESIGN.md` antes de editar y conserva sus tokens
+  experiencia, revisa `docs/design/DESIGN.md` antes de editar y conserva sus tokens
   y criterios como fuente de verdad visual.
 - Trabaja desde una rama nueva basada en `main`. Si no eres maintainer, usa el
   flujo fork-first descrito en `CONTRIBUTING.md`.
