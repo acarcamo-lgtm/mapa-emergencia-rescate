@@ -288,12 +288,18 @@ export const hospitalPocAssignments = pgTable(
     displayName: text("display_name").notNull().default("POC hospitalario"),
     role: text("role").notNull().default("hospital_poc"),
     restrictedContact: text("restricted_contact").notNull().default(""),
+    accessTokenHash: text("access_token_hash").notNull().default(""),
     active: boolean("active").notNull().default(true),
     createdAt: epochMs("created_at").notNull(),
     updatedAt: epochMs("updated_at").notNull(),
   },
   (t) => [
     index("idx_hospital_poc_assignments_hospital").on(t.hospitalId, t.active),
+    index("idx_hospital_poc_assignments_token").on(
+      t.hospitalId,
+      t.accessTokenHash,
+      t.active,
+    ),
   ],
 );
 

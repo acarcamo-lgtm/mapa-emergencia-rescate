@@ -2,6 +2,7 @@ import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { getDb, hasDbEnv, schema } from "./drizzle";
 import { timeAgo } from "./format";
 import {
+  ACTIVE_HOSPITAL_SUPPLY_NEED_STATUSES,
   HOSPITAL_SUPPLY_CATEGORIES,
   HOSPITAL_SUPPLY_CATEGORY_META,
   HOSPITAL_SUPPLY_HELP_STATUSES,
@@ -24,6 +25,7 @@ import {
   type RestrictedHospitalSupplyNeed,
   type RestrictedHospitalSupplyStatus,
   type SupplyFreshness,
+  isOpenHospitalSupplyHelpStatus,
 } from "./hospitals-meta";
 
 const {
@@ -33,9 +35,6 @@ const {
   hospitalPocAssignments,
   hospitalSupplyEvents,
 } = schema;
-
-const ACTIVE_PUBLIC_NEED_STATUSES: ReadonlySet<HospitalSupplyNeedStatus> =
-  new Set(["active", "partially_covered", "needs_verification"]);
 
 const STATUS_RANK: Record<HospitalSupplyStatus, number> = {
   red: 3,
@@ -111,8 +110,8 @@ export interface RestrictedHospitalSupplySnapshot {
 interface ValidStatusUpdate {
   category: HospitalSupplyCategory;
   status: HospitalSupplyStatus | null;
-  publicNote: string;
-  restrictedNote: string;
+  publicNote: string | null;
+  restrictedNote: string | null;
   staleAfterHours: number | null;
   updatedBy: string;
   source: string;
@@ -172,6 +171,41 @@ function text(value: unknown): string {
 
 function clampText(value: unknown, max: number): string {
   return text(value).slice(0, max);
+}
+
+function optionalClampedText(value: unknown, max: number): string | null {
+  return value === undefined ? null : clampText(value, max);
+}
+
+export function hasUnsafePublicSupplyText(value: unknown): boolean {
+  const raw = text(value);
+  if (!raw) return false;
+  const normalized = raw
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+  const hasEmail = /[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/i.test(raw);
+  const hasPhoneLikeNumber = /(?:\d[\s().-]*){7,}/.test(raw);
+  const hasContactMarker =
+    /\b(telefono|whatsapp|contacto|contactar|llamar|sms|correo|email|poc|doctor|doctora|dr|dra)\b/.test(
+      normalized,
+    );
+  const hasIdentityMarker =
+    /\b(cedula|ci|dni|pasaporte|historia clinica|numero de historia)\b/.test(
+      normalized,
+    );
+  return hasEmail || hasPhoneLikeNumber || hasContactMarker || hasIdentityMarker;
+}
+
+function rejectUnsafePublicText(
+  fields: Array<[string, unknown]>,
+): { ok: false; error: string } | null {
+  const unsafe = fields.find(([, value]) => hasUnsafePublicSupplyText(value));
+  if (!unsafe) return null;
+  return {
+    ok: false,
+    error: `No publiques ${unsafe[0]} con contactos, POC o datos identificables. Muévelo a la nota restringida.`,
+  };
 }
 
 export function normalizeSupplyCategory(
@@ -254,14 +288,16 @@ export function validateSupplyStatusUpdate(
   if (!confirmOnly && !status) {
     return { ok: false, error: "Indica un semáforo válido." };
   }
+  const unsafe = rejectUnsafePublicText([["nota pública", input.publicNote]]);
+  if (unsafe) return unsafe;
 
   return {
     ok: true,
     value: {
       category,
       status,
-      publicNote: clampText(input.publicNote, MAX_SUPPLY_NOTE),
-      restrictedNote: clampText(input.restrictedNote, MAX_SUPPLY_NOTE),
+      publicNote: optionalClampedText(input.publicNote, MAX_SUPPLY_NOTE),
+      restrictedNote: optionalClampedText(input.restrictedNote, MAX_SUPPLY_NOTE),
       staleAfterHours:
         input.staleAfterHours === undefined
           ? null
@@ -282,6 +318,12 @@ export function validateSupplyNeedInput(
   if (!itemType) {
     return { ok: false, error: "Indica el insumo o tipo requerido." };
   }
+  const unsafe = rejectUnsafePublicText([
+    ["insumo/tipo", input.itemType],
+    ["unidad", input.unit],
+    ["nota pública", input.publicNote],
+  ]);
+  if (unsafe) return unsafe;
   const urgency = normalizeSupplyStatus(input.urgency) ?? "yellow";
   if (urgency === "green") {
     return { ok: false, error: "La urgencia de una necesidad no puede ser verde." };
@@ -511,7 +553,7 @@ export function buildSupplySummary(
   needs: RestrictedHospitalSupplyNeed[],
 ): PublicHospitalSupplySummary {
   const publicNeeds = needs
-    .filter((need) => ACTIVE_PUBLIC_NEED_STATUSES.has(need.status))
+    .filter((need) => ACTIVE_HOSPITAL_SUPPLY_NEED_STATUSES.has(need.status))
     .map(redactPublicNeed);
   const publicStatuses = statuses.map(redactPublicStatus);
 
@@ -677,16 +719,23 @@ export async function upsertHospitalSupplyStatus(
       )
       .limit(1);
     const previous = existing[0];
+    if (value.confirmOnly && !previous) {
+      return {
+        ok: false,
+        error: "No hay reporte previo para confirmar sin cambios.",
+      };
+    }
     const nextStatus =
       value.confirmOnly && previous
         ? normalizeSupplyStatus(previous.status) ?? "unknown"
         : value.status ?? "unknown";
-    const nextPublicNote =
-      value.confirmOnly && previous ? previous.publicNote : value.publicNote;
+    const nextPublicNote = value.confirmOnly
+      ? previous?.publicNote ?? ""
+      : value.publicNote ?? previous?.publicNote ?? "";
     const nextRestrictedNote =
-      value.confirmOnly && previous
-        ? previous.restrictedNote
-        : value.restrictedNote;
+      value.confirmOnly
+        ? previous?.restrictedNote ?? ""
+        : value.restrictedNote ?? previous?.restrictedNote ?? "";
     const staleAfterHours =
       value.staleAfterHours ??
       previous?.staleAfterHours ??
@@ -742,6 +791,12 @@ export async function upsertHospitalSupplyStatus(
 
   const key = statusKey(hospitalId, value.category);
   const previous = memoryStatuses.get(key);
+  if (value.confirmOnly && !previous) {
+    return {
+      ok: false,
+      error: "No hay reporte previo para confirmar sin cambios.",
+    };
+  }
   const lastUpdatedAt = value.confirmOnly && previous
     ? previous.freshness.lastUpdatedAt
     : now;
@@ -754,11 +809,13 @@ export async function upsertHospitalSupplyStatus(
     status,
     label: HOSPITAL_SUPPLY_CATEGORY_META[value.category].label,
     publicNote:
-      value.confirmOnly && previous ? previous.publicNote : value.publicNote,
+      value.confirmOnly
+        ? previous?.publicNote ?? ""
+        : value.publicNote ?? previous?.publicNote ?? "",
     restrictedNote:
-      value.confirmOnly && previous
-        ? previous.restrictedNote
-        : value.restrictedNote,
+      value.confirmOnly
+        ? previous?.restrictedNote ?? ""
+        : value.restrictedNote ?? previous?.restrictedNote ?? "",
     updatedBy: value.updatedBy,
     source: value.source,
     freshness: deriveSupplyFreshness({
@@ -1067,12 +1124,24 @@ async function loadRestrictedSupplyForHospitalIds(
       getDb()
         .select()
         .from(hospitalSupplyNeeds)
-        .where(inArray(hospitalSupplyNeeds.hospitalId, uniqueIds))
+        .where(
+          and(
+            inArray(hospitalSupplyNeeds.hospitalId, uniqueIds),
+            inArray(hospitalSupplyNeeds.status, [
+              ...ACTIVE_HOSPITAL_SUPPLY_NEED_STATUSES,
+            ]),
+          ),
+        )
         .orderBy(desc(hospitalSupplyNeeds.updatedAt)),
       getDb()
         .select()
         .from(hospitalSupplyHelpRequests)
-        .where(inArray(hospitalSupplyHelpRequests.hospitalId, uniqueIds))
+        .where(
+          and(
+            inArray(hospitalSupplyHelpRequests.hospitalId, uniqueIds),
+            inArray(hospitalSupplyHelpRequests.status, ["open", "contacting"]),
+          ),
+        )
         .orderBy(desc(hospitalSupplyHelpRequests.updatedAt)),
       getDb()
         .select()
@@ -1109,7 +1178,7 @@ async function loadRestrictedSupplyForHospitalIds(
     }
     for (const need of memoryNeeds.values()) {
       const snapshot = map.get(need.hospitalId);
-      if (snapshot) {
+      if (snapshot && ACTIVE_HOSPITAL_SUPPLY_NEED_STATUSES.has(need.status)) {
         snapshot.activeNeeds.push({
           ...need,
           updatedAgo: timeAgo(need.updatedAt, now),
@@ -1118,7 +1187,7 @@ async function loadRestrictedSupplyForHospitalIds(
     }
     for (const request of memoryHelpRequests.values()) {
       const snapshot = map.get(request.hospitalId);
-      if (snapshot) {
+      if (snapshot && isOpenHospitalSupplyHelpStatus(request.status)) {
         snapshot.helpRequests.push({
           ...request,
           updatedAgo: timeAgo(request.updatedAt, now),
@@ -1144,6 +1213,79 @@ async function loadRestrictedSupplyForHospitalIds(
   return map;
 }
 
+async function loadPublicSupplySummariesForHospitalIds(
+  hospitalIds: string[],
+): Promise<Map<string, PublicHospitalSupplySummary>> {
+  const uniqueIds = [...new Set(hospitalIds)].filter(Boolean);
+  const grouped = new Map<
+    string,
+    {
+      statuses: RestrictedHospitalSupplyStatus[];
+      activeNeeds: RestrictedHospitalSupplyNeed[];
+    }
+  >();
+  for (const hospitalId of uniqueIds) {
+    grouped.set(hospitalId, { statuses: [], activeNeeds: [] });
+  }
+  if (uniqueIds.length === 0) return new Map();
+
+  const now = Date.now();
+  if (hasDbEnv()) {
+    const [statusRows, needRows] = await Promise.all([
+      getDb()
+        .select()
+        .from(hospitalSupplyStatuses)
+        .where(inArray(hospitalSupplyStatuses.hospitalId, uniqueIds)),
+      getDb()
+        .select()
+        .from(hospitalSupplyNeeds)
+        .where(
+          and(
+            inArray(hospitalSupplyNeeds.hospitalId, uniqueIds),
+            inArray(hospitalSupplyNeeds.status, [
+              ...ACTIVE_HOSPITAL_SUPPLY_NEED_STATUSES,
+            ]),
+          ),
+        )
+        .orderBy(desc(hospitalSupplyNeeds.updatedAt)),
+    ]);
+
+    for (const row of statusRows) {
+      grouped.get(row.hospitalId)?.statuses.push(rowToRestrictedStatus(row, now));
+    }
+    for (const row of needRows) {
+      grouped.get(row.hospitalId)?.activeNeeds.push(rowToRestrictedNeed(row, now));
+    }
+  } else {
+    ensureMemorySeed(uniqueIds);
+    for (const status of memoryStatuses.values()) {
+      grouped.get(status.hospitalId)?.statuses.push({
+        ...status,
+        freshness: deriveSupplyFreshness(status.freshness, now),
+      });
+    }
+    for (const need of memoryNeeds.values()) {
+      if (!ACTIVE_HOSPITAL_SUPPLY_NEED_STATUSES.has(need.status)) continue;
+      grouped.get(need.hospitalId)?.activeNeeds.push({
+        ...need,
+        updatedAgo: timeAgo(need.updatedAt, now),
+      });
+    }
+  }
+
+  const map = new Map<string, PublicHospitalSupplySummary>();
+  for (const [hospitalId, snapshot] of grouped) {
+    snapshot.statuses.sort(
+      (a, b) =>
+        HOSPITAL_SUPPLY_CATEGORIES.indexOf(a.category) -
+        HOSPITAL_SUPPLY_CATEGORIES.indexOf(b.category),
+    );
+    snapshot.activeNeeds.sort((a, b) => b.updatedAt - a.updatedAt);
+    map.set(hospitalId, buildSupplySummary(snapshot.statuses, snapshot.activeNeeds));
+  }
+  return map;
+}
+
 export async function getRestrictedHospitalSupplySnapshot(
   hospitalId: string,
 ): Promise<RestrictedHospitalSupplySnapshot> {
@@ -1163,19 +1305,14 @@ export async function getRestrictedHospitalSupplySnapshot(
 export async function getPublicHospitalSupplySummary(
   hospitalId: string,
 ): Promise<PublicHospitalSupplySummary> {
-  const snapshot = await getRestrictedHospitalSupplySnapshot(hospitalId);
-  return redactPublicSupplySnapshot(snapshot);
+  const summaries = await loadPublicSupplySummariesForHospitalIds([hospitalId]);
+  return summaries.get(hospitalId) ?? emptySummary();
 }
 
 export async function getPublicSupplySummariesForHospitals(
   hospitalIds: string[],
 ): Promise<Map<string, PublicHospitalSupplySummary>> {
-  const snapshots = await loadRestrictedSupplyForHospitalIds(hospitalIds);
-  const map = new Map<string, PublicHospitalSupplySummary>();
-  for (const [hospitalId, snapshot] of snapshots) {
-    map.set(hospitalId, redactPublicSupplySnapshot(snapshot));
-  }
-  return map;
+  return loadPublicSupplySummariesForHospitalIds(hospitalIds);
 }
 
 export async function listRestrictedSupplySnapshotsForHospitals(

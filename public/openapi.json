@@ -337,6 +337,15 @@
           "unknown"
         ]
       },
+      "HospitalSupplyUrgencySemaphore": {
+        "type": "string",
+        "enum": [
+          "yellow",
+          "red",
+          "unknown"
+        ],
+        "description": "Urgencia permitida para necesidades activas; verde se reserva para semáforos sin necesidad crítica."
+      },
       "HospitalSupplyCategoryStatus": {
         "type": "object",
         "properties": {
@@ -410,7 +419,7 @@
             "type": "string"
           },
           "urgency": {
-            "$ref": "#/components/schemas/HospitalSupplySemaphore"
+            "$ref": "#/components/schemas/HospitalSupplyUrgencySemaphore"
           },
           "status": {
             "type": "string",
@@ -506,6 +515,34 @@
         "required": [
           "category"
         ],
+        "oneOf": [
+          {
+            "required": [
+              "category",
+              "status"
+            ],
+            "properties": {
+              "confirmOnly": {
+                "enum": [
+                  false
+                ]
+              }
+            }
+          },
+          {
+            "required": [
+              "category",
+              "confirmOnly"
+            ],
+            "properties": {
+              "confirmOnly": {
+                "enum": [
+                  true
+                ]
+              }
+            }
+          }
+        ],
         "properties": {
           "category": {
             "$ref": "#/components/schemas/HospitalSupplyCategory"
@@ -557,7 +594,7 @@
             "type": "string"
           },
           "urgency": {
-            "$ref": "#/components/schemas/HospitalSupplySemaphore"
+            "$ref": "#/components/schemas/HospitalSupplyUrgencySemaphore"
           },
           "status": {
             "type": "string",
@@ -629,7 +666,7 @@
             "type": "string"
           },
           "urgency": {
-            "$ref": "#/components/schemas/HospitalSupplySemaphore"
+            "$ref": "#/components/schemas/HospitalSupplyUrgencySemaphore"
           },
           "status": {
             "type": "string",
@@ -674,7 +711,7 @@
             "type": "string"
           },
           "urgency": {
-            "$ref": "#/components/schemas/HospitalSupplySemaphore"
+            "$ref": "#/components/schemas/HospitalSupplyUrgencySemaphore"
           },
           "requestedBy": {
             "type": "string"
@@ -707,6 +744,40 @@
           },
           "source": {
             "type": "string"
+          }
+        }
+      },
+      "HospitalPocAssignment": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "hospitalId": {
+            "type": "string"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "operator_admin",
+              "hospital_poc",
+              "ops_reader"
+            ]
+          },
+          "restrictedContact": {
+            "type": "string"
+          },
+          "active": {
+            "type": "boolean"
+          },
+          "createdAt": {
+            "type": "integer"
+          },
+          "updatedAt": {
+            "type": "integer"
           }
         }
       },
@@ -746,7 +817,7 @@
               "pocs": {
                 "type": "array",
                 "items": {
-                  "type": "object"
+                  "$ref": "#/components/schemas/HospitalPocAssignment"
                 }
               }
             }
@@ -2074,7 +2145,7 @@
         "tags": [
           "hospitals"
         ],
-        "summary": "Actualiza una solicitud restringida de ayuda de insumos (requiere admin/POC)",
+        "summary": "Actualiza una solicitud restringida de ayuda de insumos (requiere x-admin-token o x-hospital-poc-token del hospital)",
         "parameters": [
           {
             "in": "path",
@@ -2130,7 +2201,7 @@
             }
           },
           "401": {
-            "description": "No autorizado",
+            "description": "No autorizado (falta token admin o POC activo para el hospital)",
             "content": {
               "application/json": {
                 "schema": {
@@ -2141,6 +2212,16 @@
           },
           "404": {
             "description": "Hospital o solicitud no encontrada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Payload demasiado grande",
             "content": {
               "application/json": {
                 "schema": {
@@ -2167,7 +2248,7 @@
         "tags": [
           "hospitals"
         ],
-        "summary": "Crea una solicitud restringida de ayuda para actualizar insumos (requiere admin/POC)",
+        "summary": "Crea una solicitud restringida de ayuda para actualizar insumos (requiere x-admin-token o x-hospital-poc-token del hospital)",
         "parameters": [
           {
             "in": "path",
@@ -2215,7 +2296,7 @@
             }
           },
           "401": {
-            "description": "No autorizado",
+            "description": "No autorizado (falta token admin o POC activo para el hospital)",
             "content": {
               "application/json": {
                 "schema": {
@@ -2226,6 +2307,16 @@
           },
           "404": {
             "description": "Hospital no encontrado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Payload demasiado grande",
             "content": {
               "application/json": {
                 "schema": {
@@ -2252,7 +2343,7 @@
         "tags": [
           "hospitals"
         ],
-        "summary": "Actualiza el estado operativo de una necesidad específica (requiere admin/POC)",
+        "summary": "Actualiza el estado operativo de una necesidad específica (requiere x-admin-token o x-hospital-poc-token del hospital)",
         "parameters": [
           {
             "in": "path",
@@ -2308,7 +2399,7 @@
             }
           },
           "401": {
-            "description": "No autorizado",
+            "description": "No autorizado (falta token admin o POC activo para el hospital)",
             "content": {
               "application/json": {
                 "schema": {
@@ -2319,6 +2410,16 @@
           },
           "404": {
             "description": "Hospital o necesidad no encontrada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Payload demasiado grande",
             "content": {
               "application/json": {
                 "schema": {
@@ -2345,7 +2446,7 @@
         "tags": [
           "hospitals"
         ],
-        "summary": "Crea una necesidad específica de insumos para un hospital (requiere admin/POC)",
+        "summary": "Crea una necesidad específica de insumos para un hospital (requiere x-admin-token o x-hospital-poc-token del hospital)",
         "parameters": [
           {
             "in": "path",
@@ -2396,7 +2497,7 @@
             }
           },
           "401": {
-            "description": "No autorizado",
+            "description": "No autorizado (falta token admin o POC activo para el hospital)",
             "content": {
               "application/json": {
                 "schema": {
@@ -2407,6 +2508,16 @@
           },
           "404": {
             "description": "Hospital no encontrado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Payload demasiado grande",
             "content": {
               "application/json": {
                 "schema": {
@@ -2480,7 +2591,7 @@
         "tags": [
           "hospitals"
         ],
-        "summary": "Actualiza o confirma el semáforo de una categoría de insumos (requiere admin/POC)",
+        "summary": "Actualiza o confirma el semáforo de una categoría de insumos (requiere x-admin-token o x-hospital-poc-token del hospital)",
         "parameters": [
           {
             "in": "path",
@@ -2531,7 +2642,7 @@
             }
           },
           "401": {
-            "description": "No autorizado",
+            "description": "No autorizado (falta token admin o POC activo para el hospital)",
             "content": {
               "application/json": {
                 "schema": {
@@ -2542,6 +2653,16 @@
           },
           "404": {
             "description": "Hospital no encontrado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Payload demasiado grande",
             "content": {
               "application/json": {
                 "schema": {

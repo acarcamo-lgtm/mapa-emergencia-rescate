@@ -119,7 +119,13 @@ export async function GET(request: Request) {
 
   const { hospitals, states } = await cached(key, 10_000, async () => {
     const [hospitals, states] = await Promise.all([
-      listHospitals({ state, priorityZone: zone, search, limit }),
+      listHospitals({
+        state,
+        priorityZone: zone,
+        search,
+        limit,
+        includeSupplySummary: true,
+      }),
       wantsStates ? listStates() : Promise.resolve(null),
     ]);
     return { hospitals, states };

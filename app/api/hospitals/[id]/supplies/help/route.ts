@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { isAdminRequest } from "@/lib/admin";
 import { BODY_LIMIT_TEXT, bodyErrorResponse, readJson } from "@/lib/body";
 import { invalidate } from "@/lib/cache";
 import { getHospital } from "@/lib/hospitals";
@@ -7,6 +6,7 @@ import {
   createHospitalSupplyHelpRequest,
   type SupplyHelpRequestInput,
 } from "@/lib/hospital-supplies";
+import { isHospitalSupplyWriteRequest } from "@/lib/supply-auth";
 
 export const dynamic = "force-dynamic";
 
@@ -15,7 +15,7 @@ export const dynamic = "force-dynamic";
  * /api/hospitals/{id}/supplies/help:
  *   post:
  *     tags: [hospitals]
- *     summary: Crea una solicitud restringida de ayuda para actualizar insumos (requiere admin/POC)
+ *     summary: Crea una solicitud restringida de ayuda para actualizar insumos (requiere x-admin-token o x-hospital-poc-token del hospital)
  *     parameters:
  *       - in: path
  *         name: id
@@ -40,8 +40,13 @@ export const dynamic = "force-dynamic";
  *         content:
  *           application/json:
  *             schema: { $ref: '#/components/schemas/Error' }
+ *       413:
+ *         description: Payload demasiado grande
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
  *       401:
- *         description: No autorizado
+ *         description: No autorizado (falta token admin o POC activo para el hospital)
  *         content:
  *           application/json:
  *             schema: { $ref: '#/components/schemas/Error' }
@@ -60,14 +65,13 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  if (!isAdminRequest(request)) {
-    return NextResponse.json({ error: "No autorizado." }, { status: 401 });
-  }
-
   const { id } = await params;
   const hospital = await getHospital(id);
   if (!hospital) {
     return NextResponse.json({ error: "Hospital no encontrado." }, { status: 404 });
+  }
+  if (!(await isHospitalSupplyWriteRequest(request, hospital.id))) {
+    return NextResponse.json({ error: "No autorizado." }, { status: 401 });
   }
 
   let body: SupplyHelpRequestInput;

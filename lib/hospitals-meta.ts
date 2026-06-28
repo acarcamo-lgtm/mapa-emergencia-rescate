@@ -306,6 +306,15 @@ export const HOSPITAL_SUPPLY_NEED_STATUSES: ReadonlySet<HospitalSupplyNeedStatus
 export const HOSPITAL_SUPPLY_HELP_STATUSES: ReadonlySet<HospitalSupplyHelpStatus> =
   new Set(["open", "contacting", "resolved", "closed"]);
 
+export const ACTIVE_HOSPITAL_SUPPLY_NEED_STATUSES: ReadonlySet<HospitalSupplyNeedStatus> =
+  new Set(["active", "partially_covered", "needs_verification"]);
+
+export function isOpenHospitalSupplyHelpStatus(
+  status: HospitalSupplyHelpStatus,
+): boolean {
+  return status === "open" || status === "contacting";
+}
+
 export const HOSPITAL_SUPPLY_CATEGORY_META: Record<
   HospitalSupplyCategory,
   {

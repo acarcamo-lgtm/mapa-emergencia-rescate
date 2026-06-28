@@ -7,6 +7,7 @@ import {
   HOSPITAL_SUPPLY_HELP_STATUS_META,
   HOSPITAL_SUPPLY_NEED_STATUS_META,
   HOSPITAL_SUPPLY_STATUS_META,
+  isOpenHospitalSupplyHelpStatus,
   type Hospital,
   type HospitalPocAssignment,
   type HospitalSupplyCategory,
@@ -187,7 +188,7 @@ export default function HospitalSuppliesPanel({ token, query }: Props) {
         category: selectedCategory,
         status,
         confirmOnly,
-        publicNote: confirmOnly ? undefined : categoryNote,
+        publicNote: confirmOnly || !categoryNote.trim() ? undefined : categoryNote,
         updatedBy: "panel_admin",
         source: "admin_panel",
       });
@@ -355,7 +356,9 @@ export default function HospitalSuppliesPanel({ token, query }: Props) {
                             {row.supply.summary.counts.activeNeeds} necesidades
                           </MiniBadge>
                         )}
-                        {row.supply.helpRequests.some((h) => h.status === "open") && (
+                        {row.supply.helpRequests.some((h) =>
+                          isOpenHospitalSupplyHelpStatus(h.status),
+                        ) && (
                           <MiniBadge color="#9333ea">ayuda</MiniBadge>
                         )}
                       </div>
@@ -427,7 +430,7 @@ export default function HospitalSuppliesPanel({ token, query }: Props) {
                   <button
                     type="button"
                     onClick={() => updateStatus(selectedStatus?.status ?? "unknown", true)}
-                    disabled={saving !== null}
+                    disabled={saving !== null || !selectedStatus}
                     className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
                   >
                     Sin cambios

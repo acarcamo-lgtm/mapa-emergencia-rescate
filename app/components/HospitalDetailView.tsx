@@ -69,6 +69,9 @@ export default function HospitalDetailView({
       const data = await res.json();
       setPatients(data.patients ?? []);
       if (data.hospital) setHospital(data.hospital);
+      if (!supplyRes.ok) {
+        throw new Error("No se pudieron cargar los insumos hospitalarios.");
+      }
       if (supplyRes.ok) {
         const supplyData = await supplyRes.json();
         setSupply(supplyData.supply ?? null);

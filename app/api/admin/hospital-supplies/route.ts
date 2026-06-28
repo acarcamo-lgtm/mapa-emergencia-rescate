@@ -5,7 +5,10 @@ import {
   listRestrictedSupplySnapshotsForHospitals,
   type RestrictedHospitalSupplySnapshot,
 } from "@/lib/hospital-supplies";
-import type { Hospital } from "@/lib/hospitals-meta";
+import {
+  isOpenHospitalSupplyHelpStatus,
+  type Hospital,
+} from "@/lib/hospitals-meta";
 
 export const dynamic = "force-dynamic";
 
@@ -101,8 +104,8 @@ export async function GET(request: Request) {
         (s) => s.freshness.isStale,
       ).length;
       activeNeeds += row.supply.summary.counts.activeNeeds;
-      helpOpen += row.supply.helpRequests.filter(
-        (request) => request.status === "open" || request.status === "contacting",
+      helpOpen += row.supply.helpRequests.filter((request) =>
+        isOpenHospitalSupplyHelpStatus(request.status),
       ).length;
     }
 

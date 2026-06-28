@@ -1,0 +1,2 @@
+ALTER TABLE "hospital_poc_assignments" ADD COLUMN "access_token_hash" text DEFAULT '' NOT NULL;--> statement-breakpoint
+CREATE INDEX "idx_hospital_poc_assignments_token" ON "hospital_poc_assignments" USING btree ("hospital_id","access_token_hash","active");

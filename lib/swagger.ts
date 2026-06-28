@@ -175,6 +175,12 @@ const SCHEMAS = {
     type: "string",
     enum: ["green", "yellow", "red", "unknown"],
   },
+  HospitalSupplyUrgencySemaphore: {
+    type: "string",
+    enum: ["yellow", "red", "unknown"],
+    description:
+      "Urgencia permitida para necesidades activas; verde se reserva para semáforos sin necesidad crítica.",
+  },
   HospitalSupplyCategoryStatus: {
     type: "object",
     properties: {
@@ -210,7 +216,7 @@ const SCHEMAS = {
       itemType: { type: "string" },
       quantity: { type: "integer", nullable: true },
       unit: { type: "string" },
-      urgency: { $ref: "#/components/schemas/HospitalSupplySemaphore" },
+      urgency: { $ref: "#/components/schemas/HospitalSupplyUrgencySemaphore" },
       status: {
         type: "string",
         enum: [
@@ -268,6 +274,20 @@ const SCHEMAS = {
   HospitalSupplyStatusUpdateInput: {
     type: "object",
     required: ["category"],
+    oneOf: [
+      {
+        required: ["category", "status"],
+        properties: {
+          confirmOnly: { enum: [false] },
+        },
+      },
+      {
+        required: ["category", "confirmOnly"],
+        properties: {
+          confirmOnly: { enum: [true] },
+        },
+      },
+    ],
     properties: {
       category: { $ref: "#/components/schemas/HospitalSupplyCategory" },
       status: { $ref: "#/components/schemas/HospitalSupplySemaphore" },
@@ -290,7 +310,7 @@ const SCHEMAS = {
       itemType: { type: "string" },
       quantity: { type: "integer", nullable: true },
       unit: { type: "string" },
-      urgency: { $ref: "#/components/schemas/HospitalSupplySemaphore" },
+      urgency: { $ref: "#/components/schemas/HospitalSupplyUrgencySemaphore" },
       status: {
         type: "string",
         enum: [
@@ -334,7 +354,7 @@ const SCHEMAS = {
       category: { $ref: "#/components/schemas/HospitalSupplyCategory" },
       categoryLabel: { type: "string" },
       message: { type: "string" },
-      urgency: { $ref: "#/components/schemas/HospitalSupplySemaphore" },
+      urgency: { $ref: "#/components/schemas/HospitalSupplyUrgencySemaphore" },
       status: {
         type: "string",
         enum: ["open", "contacting", "resolved", "closed"],
@@ -353,7 +373,7 @@ const SCHEMAS = {
     properties: {
       category: { $ref: "#/components/schemas/HospitalSupplyCategory" },
       message: { type: "string" },
-      urgency: { $ref: "#/components/schemas/HospitalSupplySemaphore" },
+      urgency: { $ref: "#/components/schemas/HospitalSupplyUrgencySemaphore" },
       requestedBy: { type: "string" },
       source: { type: "string" },
       restrictedNote: { type: "string" },
@@ -369,6 +389,22 @@ const SCHEMAS = {
       restrictedNote: { type: "string" },
       requestedBy: { type: "string" },
       source: { type: "string" },
+    },
+  },
+  HospitalPocAssignment: {
+    type: "object",
+    properties: {
+      id: { type: "string" },
+      hospitalId: { type: "string" },
+      displayName: { type: "string" },
+      role: {
+        type: "string",
+        enum: ["operator_admin", "hospital_poc", "ops_reader"],
+      },
+      restrictedContact: { type: "string" },
+      active: { type: "boolean" },
+      createdAt: { type: "integer" },
+      updatedAt: { type: "integer" },
     },
   },
   AdminHospitalSupplyRow: {
@@ -392,7 +428,10 @@ const SCHEMAS = {
             type: "array",
             items: { $ref: "#/components/schemas/HospitalSupplyHelpRequest" },
           },
-          pocs: { type: "array", items: { type: "object" } },
+          pocs: {
+            type: "array",
+            items: { $ref: "#/components/schemas/HospitalPocAssignment" },
+          },
         },
       },
     },

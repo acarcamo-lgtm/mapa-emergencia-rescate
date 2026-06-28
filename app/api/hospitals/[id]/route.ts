@@ -43,7 +43,9 @@ export async function GET(
   // El detalle puede ser un hotspot si se comparte en medios. El micro-caché
   // evita además que el fallback por slug (que carga 1000 hospitales) se
   // ejecute en cada request.
-  const hospital = await cached(`hospital:${id}`, 30_000, () => getHospital(id));
+  const hospital = await cached(`hospital:${id}`, 30_000, () =>
+    getHospital(id, { includeSupplySummary: true }),
+  );
   if (!hospital) {
     return NextResponse.json(
       { error: "Hospital no encontrado." },
