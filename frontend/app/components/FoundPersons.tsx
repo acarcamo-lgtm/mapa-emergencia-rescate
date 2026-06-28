@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import MissingPersonDetail from "./MissingPersonDetail";
 import { useLowBandwidthMode } from "./useLowBandwidthMode";
 import { useMissingList } from "@/hooks/missing";
+import { mediaUrl } from "@/lib/api";
 
 interface MissingPerson {
   id: string;
@@ -64,12 +65,12 @@ export default function FoundPersons() {
   const total = data?.total ?? 0;
   const totalPages = data?.totalPages ?? 1;
 
-  // El servidor acota la página al rango válido.
+  // Clamp hacia abajo si la página supera el total real (p.ej. tras borrados).
+  // NO seguir `data.page`: con placeholderData refleja la página anterior un
+  // instante y bloquearía la navegación devolviéndonos a ella.
   useEffect(() => {
-    if (typeof data?.page === "number" && data.page !== page) {
-      setPage(data.page);
-    }
-  }, [data?.page, page]);
+    if (totalPages >= 1 && page > totalPages) setPage(totalPages);
+  }, [totalPages, page]);
 
   // Al cambiar de página, hacemos scroll al inicio de la lista (no en la
   // carga inicial).
@@ -142,7 +143,7 @@ export default function FoundPersons() {
                 {person.photoUrl ? (
                   /* eslint-disable-next-line @next/next/no-img-element */
                   <img
-                    src={person.photoUrl}
+                    src={mediaUrl(person.photoUrl)}
                     alt={`Foto de ${person.name}`}
                     loading="lazy"
                     className="h-24 w-24 shrink-0 rounded-lg object-cover ring-1 ring-emerald-200"

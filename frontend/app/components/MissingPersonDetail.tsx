@@ -5,6 +5,7 @@ import MissingFoundForm, {
   type MissingFoundPayload,
 } from "./MissingFoundForm";
 import ImageZoomLightbox from "./ImageZoomLightbox";
+import { mediaUrl } from "@/lib/api";
 
 interface MissingPerson {
   id: string;
@@ -217,7 +218,7 @@ export default function MissingPersonDetail({
             {person.photoUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
-                src={person.photoUrl}
+                src={mediaUrl(person.photoUrl)}
                 alt={`Foto de ${person.name}`}
                 className="e-person-modal__photo"
                 onClick={() => setZoomOpen(true)}
@@ -289,13 +290,13 @@ export default function MissingPersonDetail({
               )}
               {person.resolutionPhotoUrl && (
                 <a
-                  href={person.resolutionPhotoUrl}
+                  href={mediaUrl(person.resolutionPhotoUrl)}
                   target="_blank"
                   rel="noopener noreferrer"
                 >
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
-                    src={person.resolutionPhotoUrl}
+                    src={mediaUrl(person.resolutionPhotoUrl)}
                     alt="Prueba de contacto"
                     className="mt-2 max-h-48 w-full rounded-lg object-cover ring-1 ring-blue-200"
                   />
@@ -346,7 +347,7 @@ export default function MissingPersonDetail({
 
       {person.photoUrl && (
         <ImageZoomLightbox
-          src={person.photoUrl}
+          src={mediaUrl(person.photoUrl)!}
           alt={`Foto de ${person.name}`}
           isOpen={zoomOpen}
           onClose={() => setZoomOpen(false)}

@@ -2,6 +2,7 @@
 
 import { memo } from "react";
 import type { MissingPerson } from "@/hooks/missing";
+import { mediaUrl } from "@/lib/api";
 
 interface MissingPersonCardProps {
   person: MissingPerson;
@@ -38,7 +39,7 @@ function MissingPersonCardImpl({ person, onOpen }: MissingPersonCardProps) {
         {person.photoUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
-            src={person.photoUrl}
+            src={mediaUrl(person.photoUrl)}
             alt={`Foto de ${person.name}`}
             loading="lazy"
             className="e-person-card__photo"

@@ -62,4 +62,5 @@ Emergencia nacional de búsqueda/
 Emergencia nacional de búsqueda.zip
 
 .claude/commands/*
-upload-github-secrets.shupload-github-secrets.sh
+upload-github-secrets.sh
+node_modules/

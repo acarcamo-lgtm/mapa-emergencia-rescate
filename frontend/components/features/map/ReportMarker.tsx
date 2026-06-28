@@ -2,6 +2,7 @@ import { memo } from "react";
 import L from "leaflet";
 import { Marker, Popup } from "react-leaflet";
 import { REPORT_TYPES, type EmergencyReport } from "@/lib/types";
+import { mediaUrl } from "@/lib/api";
 import { timeAgo } from "@/lib/format";
 import { xShareHref, whatsappShareHref } from "@/lib/share";
 import LinkText from "@/app/components/LinkText";
@@ -49,7 +50,7 @@ function ReportMarkerBase({
 						>
 							{/* eslint-disable-next-line @next/next/no-img-element */}
 							<img
-								src={report.photoUrl}
+								src={mediaUrl(report.photoUrl)}
 								alt="Foto del reporte"
 								loading="lazy"
 								className="my-1 max-h-52 w-full rounded-lg bg-slate-100 object-contain"

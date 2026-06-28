@@ -14,6 +14,7 @@ import {
   trackPersonSearchStarted,
 } from "./analytics";
 import { timeAgo } from "@/lib/format";
+import { mediaUrl } from "@/lib/api";
 import {
   useMissingList,
   useCreateMissing,
@@ -99,7 +100,6 @@ export default function MissingPersons() {
     totalPages,
     totalCapped,
     persistent,
-    serverPage,
     fetching,
     refetch,
     patchLocal,
@@ -131,10 +131,13 @@ export default function MissingPersons() {
     return () => clearTimeout(t);
   }, [query]);
 
-  // El server acota la página al rango válido (p.ej. tras borrados): seguirlo.
+  // Clamp hacia abajo si la página pedida supera el total real (p.ej. tras
+  // borrados). NO seguir `serverPage` a ciegas: con placeholderData el server
+  // todavía refleja la página ANTERIOR un instante y nos devolvería a ella,
+  // bloqueando la navegación. Solo corregimos si nos pasamos del rango.
   useEffect(() => {
-    if (serverPage != null && serverPage !== page) setPage(serverPage);
-  }, [serverPage, page]);
+    if (totalPages >= 1 && page > totalPages) setPage(totalPages);
+  }, [totalPages, page]);
 
   // Marca de tiempo "actualizada hace X" cuando llega una respuesta de fondo.
   useEffect(() => {
@@ -369,7 +372,7 @@ export default function MissingPersons() {
                       {person.photoUrl ? (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img
-                          src={person.photoUrl}
+                          src={mediaUrl(person.photoUrl)}
                           alt={`Foto de ${person.name}`}
                           loading="lazy"
                           className="h-24 w-24 shrink-0 rounded-lg object-cover ring-1 ring-slate-200"
@@ -575,7 +578,6 @@ function useApiListMissing(
     totalPages: server?.totalPages ?? 1,
     totalCapped: server?.totalCapped ?? false,
     persistent: server?.persistent ?? true,
-    serverPage: server?.page ?? null,
     fetching: query.isFetching,
     refetch: () => query.refetch(),
     patchLocal,

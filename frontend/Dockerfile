@@ -30,6 +30,11 @@ ENV NEXT_TELEMETRY_DISABLED=1
 # URL ABSOLUTA del backend (NEXT_PUBLIC_* -> build-arg). Dev: http://localhost:8080.
 ARG NEXT_PUBLIC_API_URL
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+# Base pública del bucket R2/CDN de fotos (no sensible). Las fotos se sirven vía
+# el redirect del backend (/api/.../photo -> R2); esta var queda disponible para
+# enlaces directos al CDN si se necesitan. Prod: https://bucket-vzla-terremoto.dreamit.software
+ARG NEXT_PUBLIC_R2_PUBLIC_BASE
+ENV NEXT_PUBLIC_R2_PUBLIC_BASE=$NEXT_PUBLIC_R2_PUBLIC_BASE
 RUN npm run build
 
 # ---- runtime: slim, no-root ----

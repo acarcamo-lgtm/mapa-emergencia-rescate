@@ -2,6 +2,7 @@ import { memo } from "react";
 import L from "leaflet";
 import { Marker, Popup } from "react-leaflet";
 import { REPORT_TYPES } from "@/lib/types";
+import { mediaUrl } from "@/lib/api";
 import { jitterPosition, markerIcon } from "./icons";
 
 export interface MissingPointProps {
@@ -54,7 +55,7 @@ function MissingMarkerBase({
 					{p.photoUrl && (
 						// eslint-disable-next-line @next/next/no-img-element
 						<img
-							src={p.photoUrl}
+							src={mediaUrl(p.photoUrl)}
 							alt={`Foto de ${p.name}`}
 							loading="lazy"
 							className="my-1 max-h-52 w-full rounded-lg bg-slate-100 object-contain"

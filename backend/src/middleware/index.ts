@@ -31,20 +31,25 @@ export function asyncHandler(
 
 /** Rate-limit por IP (cf-connecting-ip) + scope. Valkey-backed, fail-open. */
 export function rateLimit(opts: { scope: string; limit: number; windowMs?: number }): RequestHandler {
-  return asyncHandler(async (req, _res) => {
-    const ok = await checkRateLimit(`${opts.scope}:${clientIp(req)}`, {
-      limit: opts.limit,
-      windowMs: opts.windowMs,
-    });
-    if (!ok) throw tooManyRequests("Vas muy rápido. Espera un momento e inténtalo de nuevo.");
-  });
+  return (req, _res, next) => {
+    checkRateLimit(`${opts.scope}:${clientIp(req)}`, { limit: opts.limit, windowMs: opts.windowMs })
+      .then((ok) => {
+        if (!ok) throw tooManyRequests("Vas muy rápido. Espera un momento e inténtalo de nuevo.");
+        next();
+      })
+      .catch(next);
+  };
 }
 
 /** Prueba de humanidad: Cloudflare Turnstile. Bloquea bots en writes públicos. */
-export const requireHuman: RequestHandler = asyncHandler(async (req, _res) => {
-  const human = await verifyTurnstile(req);
-  if (!human) throw forbidden("Verificación anti-bot fallida. Recarga e inténtalo de nuevo.");
-});
+export const requireHuman: RequestHandler = (req, _res, next) => {
+  verifyTurnstile(req)
+    .then((human) => {
+      if (!human) throw forbidden("Verificación anti-bot fallida. Recarga e inténtalo de nuevo.");
+      next();
+    })
+    .catch(next);
+};
 
 function safeEqual(a: string, b: string): boolean {
   const ab = Buffer.from(a);

@@ -24,10 +24,29 @@ const DEFAULT_TIMEOUT_MS = 8000;
 /** URL base del backend. Vacío => mismo origen (fallback SSR/test). */
 export const API_BASE = (process.env.NEXT_PUBLIC_API_URL ?? "").replace(/\/$/, "");
 
+/**
+ * Base pública del CDN R2 de fotos (no sensible). Las fotos se sirven vía el
+ * redirect del backend (`/api/.../photo` → R2), así que el render NO depende de
+ * esto; queda expuesto para construir enlaces directos al CDN si hicieran falta.
+ */
+export const R2_PUBLIC_BASE = (process.env.NEXT_PUBLIC_R2_PUBLIC_BASE ?? "").replace(/\/$/, "");
+
 /** Antepone API_BASE a rutas que empiezan con "/" (deja URLs absolutas intactas). */
 function resolveUrl(path: string): string {
   if (/^https?:\/\//.test(path)) return path;
   return `${API_BASE}${path}`;
+}
+
+/**
+ * Resuelve una URL de media (fotos) servida por el backend. El backend devuelve
+ * rutas RELATIVAS (`/api/missing/:id/photo`) que, en un `<img src>`, el browser
+ * resolvería contra el origen de la PÁGINA (:3000) en vez del backend (:8080) →
+ * 404. Esto las ancla a API_BASE. Si el backend ya devolviera una URL absoluta
+ * de R2/CDN, se deja intacta. Acepta null/"" y lo propaga.
+ */
+export function mediaUrl(path: string | null | undefined): string | undefined {
+  if (!path) return undefined;
+  return resolveUrl(path);
 }
 
 export class ApiError extends Error {

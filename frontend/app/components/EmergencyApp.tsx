@@ -13,6 +13,7 @@ import AdminLogin from "./AdminLogin";
 import AddressSearch, { type GeocodeResult } from "./AddressSearch";
 import { useLowBandwidthMode } from "./useLowBandwidthMode";
 import { distanceMeters, freshnessClass, timeAgo } from "@/lib/format";
+import { mediaUrl } from "@/lib/api";
 import {
 	EDIFICIOS_COUNT,
 	EDIFICIOS_SOURCE_LABEL,
@@ -979,7 +980,7 @@ export default function EmergencyApp() {
 													{report.photoUrl && (
 														// eslint-disable-next-line @next/next/no-img-element
 														<img
-															src={report.photoUrl}
+															src={mediaUrl(report.photoUrl)}
 															alt=""
 															loading="lazy"
 															className="h-12 w-12 shrink-0 rounded-md object-cover ring-1 ring-slate-200"

@@ -87,19 +87,15 @@ export const PersonsTab = forwardRef<PersonsTabHandle>(function PersonsTab(
   const total = data?.total ?? 0;
   const totalPages = data?.totalPages ?? 1;
   const foundTotal = stats.data?.found ?? 0;
-  // El server acota la página al rango válido (p.ej. tras borrados): seguirlo.
-  const serverPage = data?.page;
 
-  useEffect(() => {
-    if (typeof serverPage === "number" && serverPage !== page) {
-      setPage(serverPage);
-    }
-  }, [serverPage, page]);
-
+  // Reset a página 1 al cambiar tamaño de grilla, búsqueda o filtro.
   useEffect(() => {
     setPage(1);
   }, [pageSize, debouncedQuery, filter]);
 
+  // Clamp hacia abajo si la página supera el total real (p.ej. tras borrados).
+  // NO seguir `data.page` a ciegas: con placeholderData el server aún refleja la
+  // página ANTERIOR un instante y nos devolvería a ella, bloqueando el avance.
   useEffect(() => {
     setPage((p) => Math.min(p, Math.max(1, totalPages)));
   }, [totalPages]);

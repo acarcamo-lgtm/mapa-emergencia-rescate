@@ -72,6 +72,8 @@ services:
       args:
         # URL absoluta del backend para el BROWSER (no la red de Docker).
         NEXT_PUBLIC_API_URL: "http://localhost:8080"
+        # Base pública del CDN de fotos (no sensible).
+        NEXT_PUBLIC_R2_PUBLIC_BASE: "https://bucket-vzla-terremoto.dreamit.software"
     ports:
       - "3000:3000"
     depends_on:

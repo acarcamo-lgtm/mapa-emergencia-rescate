@@ -3,6 +3,7 @@
 import { memo } from "react";
 import { REPORT_TYPES, type EmergencyReport } from "@/lib/types";
 import { freshnessClass, timeAgo } from "@/lib/format";
+import { mediaUrl } from "@/lib/api";
 
 export interface ReportCardProps {
   report: EmergencyReport;
@@ -38,7 +39,7 @@ function ReportCardImpl({
           {report.photoUrl && (
             // eslint-disable-next-line @next/next/no-img-element
             <img
-              src={report.photoUrl}
+              src={mediaUrl(report.photoUrl)}
               alt=""
               loading="lazy"
               className="h-12 w-12 shrink-0 rounded-md object-cover ring-1 ring-slate-200"

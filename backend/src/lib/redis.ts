@@ -19,7 +19,11 @@ export function getRedisSafe(): IORedis | null {
       maxRetriesPerRequest: 1,
       connectTimeout: 1000,
       commandTimeout: 1000,
-      enableOfflineQueue: false,
+      // enableOfflineQueue:true (default) — los comandos esperan a que la
+      // conexión esté lista (unos ms al arrancar) en vez de fallar con "Stream
+      // isn't writeable". commandTimeout sigue rechazando rápido si Valkey está
+      // muerto → checkRateLimit cae a memoria (fail-open).
+      enableOfflineQueue: true,
     });
     _client.on("error", () => {
       /* el modo degradado lo maneja checkRateLimit */
