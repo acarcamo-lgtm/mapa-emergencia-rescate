@@ -14,7 +14,7 @@
  *     oid 20 as a JS number for driver parity).
  *   - Coordinates: DOUBLE PRECISION (`doublePrecision`).
  *
- * 16 tables total. The only real relation is hospital_patients -> hospitals.
+ * 18 tables total. The only real relation is hospital_patients -> hospitals.
  * (12 canónicas + contact_messages, analytics_events, damage_candidates,
  * unidentified_persons; estas 4 existen en prod aunque parte sean legado.)
  */
@@ -97,6 +97,11 @@ export const missingPersons = pgTable(
     photoExternalUrl: text("photo_external_url"),
     lat: doublePrecision("lat"),
     lng: doublePrecision("lng"),
+    personGroupId: text("person_group_id"),
+    groupMatchKind: text("group_match_kind"),
+    photoHash: text("photo_hash"),
+    resolutionPhotoHash: text("resolution_photo_hash"),
+    identityDocumentHash: text("identity_document_hash"),
     createdAt: epochMs("created_at").notNull(),
     // See reports.photoMigratedAt. Covers BOTH base64 `photo` and external
     // `photo_external_url` being moved onto R2. NULL = pending.
@@ -105,11 +110,50 @@ export const missingPersons = pgTable(
   (t) => [
     index("idx_missing_status_created").on(t.status, t.createdAt.desc()),
     index("idx_missing_map_coords").on(t.lat, t.lng),
+    index("idx_missing_person_group").on(t.personGroupId, t.createdAt.desc()),
+    index("idx_missing_photo_hash").on(t.photoHash),
+    index("idx_missing_resolution_photo_hash").on(t.resolutionPhotoHash),
+    index("idx_missing_identity_document_hash").on(t.identityDocumentHash),
     index("idx_missing_photo_pending")
       .on(t.id)
       .where(
         sql`photo_migrated_at IS NULL AND (photo IS NOT NULL OR photo_external_url IS NOT NULL)`,
       ),
+  ],
+);
+
+export const missingPersonGroups = pgTable(
+  "missing_person_groups",
+  {
+    id: text("id").primaryKey(),
+    displayName: text("display_name").notNull().default(""),
+    normalizedName: text("normalized_name").notNull().default(""),
+    representativeArea: text("representative_area").notNull().default(""),
+    status: text("status").notNull().default("active"),
+    reportCount: integer("report_count").notNull().default(0),
+    hasIdentityDocument: boolean("has_identity_document").notNull().default(false),
+    statusConflict: boolean("status_conflict").notNull().default(false),
+    createdAt: epochMs("created_at").notNull(),
+    updatedAt: epochMs("updated_at").notNull(),
+  },
+  (t) => [
+    index("idx_missing_person_groups_status").on(t.status, t.updatedAt.desc()),
+    index("idx_missing_person_groups_name").on(t.normalizedName),
+  ],
+);
+
+export const missingPersonImageHashes = pgTable(
+  "missing_person_image_hashes",
+  {
+    photoHash: text("photo_hash").primaryKey(),
+    missingPersonId: text("missing_person_id")
+      .notNull()
+      .references(() => missingPersons.id, { onDelete: "cascade" }),
+    purpose: text("purpose").notNull(),
+    createdAt: epochMs("created_at").notNull(),
+  },
+  (t) => [
+    index("idx_missing_image_hash_person").on(t.missingPersonId, t.purpose),
   ],
 );
 

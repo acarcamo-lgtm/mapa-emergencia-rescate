@@ -2,7 +2,9 @@ import { NextResponse } from "next/server";
 import {
   addMissing,
   DEFAULT_PAGE_SIZE,
+  isDuplicatePhotoError,
   isValidPhotoDataUrl,
+  listMissingGroupsPage,
   listMissingPage,
   MAX_NAME,
   MAX_NATIONALITY,
@@ -50,6 +52,10 @@ const SEARCH_CACHE_HEADERS = {
  *         name: q
  *         schema: { type: string }
  *         description: Término de búsqueda por nombre.
+ *       - in: query
+ *         name: grouped
+ *         schema: { type: boolean, default: false }
+ *         description: Devuelve representantes agrupados sin borrar reportes.
  *     responses:
  *       200:
  *         description: Página de personas
@@ -109,6 +115,11 @@ const SEARCH_CACHE_HEADERS = {
  *         content:
  *           application/json:
  *             schema: { $ref: '#/components/schemas/Error' }
+ *       409:
+ *         description: Foto idéntica ya recibida en otro reporte
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
  *       503:
  *         description: No se pudo guardar el reporte
  *         content:
@@ -128,14 +139,17 @@ export async function GET(request: Request) {
   const page = Number(params.get("page") ?? "1");
   const pageSize = Number(params.get("pageSize") ?? String(DEFAULT_PAGE_SIZE));
   const search = params.get("q") ?? undefined;
+  const grouped = params.get("grouped") === "1" || params.get("grouped") === "true";
   // Una búsqueda efectiva necesita al menos MIN_SEARCH_LEN caracteres; por
   // debajo de eso se trata como listado normal (TTL corto, conteo exacto).
   const hasSearch = (search ?? "").trim().length >= MIN_SEARCH_LEN;
   // Clave por params: la página 1 sin búsqueda (lo que ve el 95%) cachea
   // perfecto; las búsquedas/páginas profundas entran en el LRU acotado.
-  const key = `missing:${status}:${page}:${pageSize}:${search ?? ""}`;
+  const key = `missing:${grouped ? "grouped" : "flat"}:${status}:${page}:${pageSize}:${search ?? ""}`;
   const result = await cached(key, hasSearch ? 30_000 : 2_000, () =>
-    listMissingPage({ status, page, pageSize, search }),
+    grouped
+      ? listMissingGroupsPage({ status, page, pageSize, search })
+      : listMissingPage({ status, page, pageSize, search }),
   );
 
   return jsonWithEtag(
@@ -229,7 +243,17 @@ export async function POST(request: Request) {
       photo: body.photo,
       reportType,
     });
-  } catch {
+  } catch (error) {
+    if (isDuplicatePhotoError(error)) {
+      return NextResponse.json(
+        {
+          code: "duplicate_photo",
+          error:
+            "Ya recibimos una foto idéntica. Para evitar duplicados, revisa el reporte existente antes de enviar otro.",
+        },
+        { status: 409 },
+      );
+    }
     return NextResponse.json(
       {
         error:

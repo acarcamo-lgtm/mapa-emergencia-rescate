@@ -50,7 +50,10 @@ export function buildOpenApiSpec(): Record<string, unknown> {
 const SCHEMAS = {
   Error: {
     type: "object",
-    properties: { error: { type: "string" } },
+    properties: {
+      error: { type: "string" },
+      code: { type: "string", nullable: true },
+    },
   },
   EmergencyReport: {
     type: "object",
@@ -79,11 +82,40 @@ const SCHEMAS = {
       description: { type: "string" },
       lastSeen: { type: "string" },
       contact: { type: "string" },
+      source: { type: "string", nullable: true },
+      sourceUrl: { type: "string", nullable: true },
       photoUrl: { type: "string", nullable: true },
       status: { type: "string", enum: ["active", "found"] },
       resolutionNote: { type: "string", nullable: true },
       resolutionPhotoUrl: { type: "string", nullable: true },
       resolvedAt: { type: "integer", nullable: true },
+      groupId: { type: "string", nullable: true },
+      groupMatchKind: {
+        type: "string",
+        enum: ["name_age", "name_location", "name_only"],
+        nullable: true,
+      },
+      groupReportCount: { type: "integer", nullable: true },
+      groupHasIdentityDocument: { type: "boolean", nullable: true },
+      groupStatusConflict: { type: "boolean", nullable: true },
+      groupMembers: {
+        type: "array",
+        nullable: true,
+        items: {
+          type: "object",
+          properties: {
+            id: { type: "string" },
+            name: { type: "string" },
+            age: { type: "integer", nullable: true },
+            lastSeen: { type: "string" },
+            source: { type: "string", nullable: true },
+            sourceUrl: { type: "string", nullable: true },
+            status: { type: "string", enum: ["active", "found"] },
+            createdAt: { type: "integer" },
+            resolvedAt: { type: "integer", nullable: true },
+          },
+        },
+      },
       createdAt: { type: "integer", description: "epoch-ms" },
     },
   },

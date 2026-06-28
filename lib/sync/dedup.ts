@@ -61,6 +61,18 @@ export interface DuplicateReport {
   samePersonCollapsible: number;
   /** Grupos ambiguos (posibles homónimos) a revisar a mano. */
   homonymGroups: number;
+  /** Grupos ya materializados por el modelo local no destructivo. */
+  persistedGroups: number;
+  /** Filas crudas cubiertas por grupos materializados de más de un reporte. */
+  persistedGroupedReports: number;
+  /** Grupos materializados con conflicto active/found. */
+  statusConflictGroups: number;
+  /** Hashes exactos de imagen registrados para compuerta de duplicados. */
+  imageHashes: number;
+  /** Hashes exactos repetidos entre filas históricas ya existentes. */
+  exactImageDuplicateGroups: number;
+  /** Filas históricas sobrantes dentro de hashes exactos repetidos. */
+  exactImageDuplicateReports: number;
   topGroups: DuplicateGroup[];
   generatedAt: number;
 }
@@ -70,6 +82,10 @@ interface Row {
   c: number;
   ages: number;
   locs: number;
+}
+
+function execRows<T>(result: unknown): T[] {
+  return (Array.isArray(result) ? result : (result as { rows: T[] }).rows) as T[];
 }
 
 export async function buildDuplicateReport(
@@ -85,7 +101,7 @@ export async function buildDuplicateReport(
   // Una sola pasada: agrupa por nombre normalizado y cuenta edades/ubicaciones.
   // Usa el escape hatch `sql`: translate() + agregados FILTER no se expresan
   // limpiamente con el query builder. Semántica idéntica a la versión SQL cruda.
-  const groups = (
+  const groups = execRows<Row>(
     await db.execute(sql`
       WITH norm AS (
         SELECT translate(lower(trim(${missingPersons.name})), 'áéíóúüñ', 'aeiouun') AS nm,
@@ -101,15 +117,58 @@ export async function buildDuplicateReport(
       FROM norm
       GROUP BY nm
       HAVING count(*) > 1
-    `)
-  ).rows as unknown as Row[];
+    `),
+  );
 
-  const totalRowsRes = (
+  const totalRowsRes = execRows<{ n: number }>(
     await db.execute(sql`
       SELECT count(*)::int AS n FROM ${missingPersons}
       WHERE ${missingPersons.source} = ${source} AND trim(${missingPersons.name}) <> ''
-    `)
-  ).rows as { n: number }[];
+    `),
+  );
+
+  const groupStats = execRows<{
+    persisted_groups: number;
+    persisted_grouped_reports: number;
+    status_conflict_groups: number;
+  }>(
+    await db.execute(sql`
+      SELECT
+        count(*) FILTER (WHERE report_count > 1)::int AS persisted_groups,
+        COALESCE(sum(report_count) FILTER (WHERE report_count > 1), 0)::int AS persisted_grouped_reports,
+        count(*) FILTER (WHERE status_conflict)::int AS status_conflict_groups
+      FROM missing_person_groups
+    `),
+  )[0] ?? {
+    persisted_groups: 0,
+    persisted_grouped_reports: 0,
+    status_conflict_groups: 0,
+  };
+
+  const imageStats = execRows<{
+    image_hashes: number;
+    duplicate_groups: number;
+    duplicate_reports: number;
+  }>(
+    await db.execute(sql`
+      WITH duplicate_hashes AS (
+        SELECT photo_hash, count(*)::int AS c
+        FROM missing_persons
+        WHERE photo_hash IS NOT NULL
+        GROUP BY photo_hash
+        HAVING count(*) > 1
+      )
+      SELECT
+        (SELECT count(*)::int FROM missing_person_image_hashes) AS image_hashes,
+        count(*)::int AS duplicate_groups,
+        COALESCE(sum(c - 1), 0)::int AS duplicate_reports
+      FROM duplicate_hashes
+    `),
+  )[0] ?? {
+    image_hashes: 0,
+    duplicate_groups: 0,
+    duplicate_reports: 0,
+  };
 
   let collapsibleRows = 0;
   let samePersonGroups = 0;
@@ -144,6 +203,12 @@ export async function buildDuplicateReport(
     samePersonGroups,
     samePersonCollapsible,
     homonymGroups,
+    persistedGroups: Number(groupStats.persisted_groups),
+    persistedGroupedReports: Number(groupStats.persisted_grouped_reports),
+    statusConflictGroups: Number(groupStats.status_conflict_groups),
+    imageHashes: Number(imageStats.image_hashes),
+    exactImageDuplicateGroups: Number(imageStats.duplicate_groups),
+    exactImageDuplicateReports: Number(imageStats.duplicate_reports),
     topGroups,
     generatedAt: Date.now(),
   };

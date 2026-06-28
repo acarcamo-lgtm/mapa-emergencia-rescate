@@ -28,6 +28,16 @@ interface MissingPerson {
   resolutionNote?: string | null;
   resolutionPhotoUrl?: string | null;
   resolvedAt?: number | null;
+  groupReportCount?: number;
+  groupStatusConflict?: boolean;
+  groupMembers?: {
+    id: string;
+    name: string;
+    lastSeen: string;
+    status: "active" | "found";
+    createdAt: number;
+    resolvedAt: number | null;
+  }[];
   createdAt: number;
 }
 
@@ -105,6 +115,7 @@ export default function MissingPersons() {
         const params = new URLSearchParams({
           page: String(page),
           pageSize: String(PAGE_SIZE),
+          grouped: "1",
         });
         // Solo buscamos con MIN_SEARCH_LEN+ caracteres; por debajo, listado normal.
         if (debouncedQuery.trim().length >= MIN_SEARCH_LEN) {
@@ -275,10 +286,10 @@ export default function MissingPersons() {
               </h2>
               <span
                 className="inline-flex items-center gap-1 rounded-full bg-purple-100 px-2.5 py-0.5 text-xs font-semibold text-purple-800"
-                aria-label={`${total} personas reportadas`}
-                title="Total de personas reportadas"
+                aria-label={`${total} grupos de personas reportadas`}
+                title="Total de grupos publicados"
               >
-                {total} reportada{total === 1 ? "" : "s"}
+                {total} grupo{total === 1 ? "" : "s"}
               </span>
             </div>
             <p className="mt-1 text-sm text-slate-600">
@@ -417,6 +428,16 @@ export default function MissingPersons() {
                             </span>
                           )}
                         </p>
+                        {(person.groupReportCount ?? 1) > 1 && (
+                          <p className="mt-1 inline-flex items-center rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-semibold text-blue-700">
+                            Mismo registro · {person.groupReportCount ?? 1} reportes
+                          </p>
+                        )}
+                        {person.groupStatusConflict && (
+                          <p className="mt-1 rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] font-medium text-amber-800">
+                            Una fuente la reporta localizada; verifica antes de cerrar.
+                          </p>
+                        )}
                         {person.lastSeen && (
                           <p className="mt-0.5 text-xs text-slate-600">
                             📍 {person.lastSeen}

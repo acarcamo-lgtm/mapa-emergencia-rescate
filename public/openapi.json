@@ -50,6 +50,10 @@
         "properties": {
           "error": {
             "type": "string"
+          },
+          "code": {
+            "type": "string",
+            "nullable": true
           }
         }
       },
@@ -120,6 +124,14 @@
           "contact": {
             "type": "string"
           },
+          "source": {
+            "type": "string",
+            "nullable": true
+          },
+          "sourceUrl": {
+            "type": "string",
+            "nullable": true
+          },
           "photoUrl": {
             "type": "string",
             "nullable": true
@@ -142,6 +154,75 @@
           "resolvedAt": {
             "type": "integer",
             "nullable": true
+          },
+          "groupId": {
+            "type": "string",
+            "nullable": true
+          },
+          "groupMatchKind": {
+            "type": "string",
+            "enum": [
+              "name_age",
+              "name_location",
+              "name_only"
+            ],
+            "nullable": true
+          },
+          "groupReportCount": {
+            "type": "integer",
+            "nullable": true
+          },
+          "groupHasIdentityDocument": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "groupStatusConflict": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "groupMembers": {
+            "type": "array",
+            "nullable": true,
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "age": {
+                  "type": "integer",
+                  "nullable": true
+                },
+                "lastSeen": {
+                  "type": "string"
+                },
+                "source": {
+                  "type": "string",
+                  "nullable": true
+                },
+                "sourceUrl": {
+                  "type": "string",
+                  "nullable": true
+                },
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "active",
+                    "found"
+                  ]
+                },
+                "createdAt": {
+                  "type": "integer"
+                },
+                "resolvedAt": {
+                  "type": "integer",
+                  "nullable": true
+                }
+              }
+            }
           },
           "createdAt": {
             "type": "integer",
@@ -3083,6 +3164,16 @@
               }
             }
           },
+          "409": {
+            "description": "La foto de prueba ya existe en otro reporte",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
           "413": {
             "description": "La imagen excede el tamaño permitido",
             "content": {
@@ -3431,6 +3522,15 @@
               "type": "string"
             },
             "description": "Término de búsqueda por nombre."
+          },
+          {
+            "in": "query",
+            "name": "grouped",
+            "schema": {
+              "type": "boolean",
+              "default": false
+            },
+            "description": "Devuelve representantes agrupados sin borrar reportes."
           }
         ],
         "responses": {
@@ -3538,6 +3638,16 @@
           },
           "400": {
             "description": "Datos inválidos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Foto idéntica ya recibida en otro reporte",
             "content": {
               "application/json": {
                 "schema": {

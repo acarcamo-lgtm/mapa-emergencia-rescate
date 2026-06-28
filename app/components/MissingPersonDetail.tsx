@@ -14,11 +14,25 @@ interface MissingPerson {
   description: string;
   lastSeen: string;
   contact: string;
+  source?: string | null;
+  sourceUrl?: string | null;
   photoUrl: string | null;
   status?: "active" | "found";
   resolutionNote?: string | null;
   resolutionPhotoUrl?: string | null;
   resolvedAt?: number | null;
+  groupReportCount?: number;
+  groupStatusConflict?: boolean;
+  groupMembers?: {
+    id: string;
+    name: string;
+    source?: string | null;
+    sourceUrl?: string | null;
+    lastSeen: string;
+    status: "active" | "found";
+    createdAt: number;
+    resolvedAt: number | null;
+  }[];
   createdAt: number;
 }
 
@@ -276,6 +290,52 @@ export default function MissingPersonDetail({
 
           {person.description && (
             <p className="e-person-modal__desc">{person.description}</p>
+          )}
+
+          {(person.groupReportCount ?? 1) > 1 && (
+            <div className="mt-4 rounded-xl border border-blue-100 bg-blue-50 p-3 text-sm text-blue-900">
+              <p className="font-semibold">
+                Mismo registro · {person.groupReportCount ?? 1} reportes
+              </p>
+              {person.groupStatusConflict && (
+                <p className="mt-1 text-xs font-medium text-amber-800">
+                  Una fuente marca a esta persona como localizada y otra sigue activa.
+                </p>
+              )}
+              {person.groupMembers && (
+                <ul className="mt-2 space-y-1 text-xs">
+                  {person.groupMembers.slice(0, 5).map((member) => (
+                    <li key={member.id} className="grid gap-1 sm:grid-cols-[minmax(0,1fr)_auto] sm:gap-3">
+                      <span className="min-w-0">
+                        <span className="font-semibold">{member.name}</span>
+                        {member.lastSeen && (
+                          <span className="text-blue-800"> · {member.lastSeen}</span>
+                        )}
+                        {(member.source || member.sourceUrl) && (
+                          <span className="block text-blue-700">
+                            {member.sourceUrl ? (
+                              <a
+                                href={member.sourceUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="font-semibold underline decoration-blue-300 underline-offset-2"
+                              >
+                                {member.source || "Ver fuente"}
+                              </a>
+                            ) : (
+                              member.source
+                            )}
+                          </span>
+                        )}
+                      </span>
+                      <span className="shrink-0 font-semibold">
+                        {member.status === "found" ? "Localizada" : "Activa"}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
           )}
 
           {isFound ? (

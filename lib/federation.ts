@@ -426,11 +426,15 @@ export function missingPersonEnvelope(person: MissingPerson, request: Request): 
       admin1: areaLabel(person.lastSeen),
       status: person.status === "found" ? "found_safe" : "missing",
       sourceUpdatedAt: iso(person.resolvedAt ?? person.createdAt),
+      localGroupId: person.groupId ?? null,
+      localGroupReportCount: person.groupReportCount ?? 1,
     },
     privateReviewFields: {
       lastSeenText: person.lastSeen,
       contactPrivate: Boolean(person.contact),
       hasPhoto: Boolean(person.photoUrl),
+      groupMatchKind: person.groupMatchKind ?? null,
+      groupStatusConflict: Boolean(person.groupStatusConflict),
     },
   };
 
@@ -447,7 +451,7 @@ export function missingPersonEnvelope(person: MissingPerson, request: Request): 
     canonicalCandidates: [personCandidate],
     processingHints: processingHints("person", {
       cleanupPipeline: ["normalize_person", "match_person", "dedupe_review", "promote_via_persons_api"],
-      dedupeSignals: ["sourceRecordId", "name_age_area", "photo_present", "status_timestamp"],
+      dedupeSignals: ["sourceRecordId", "localGroupId", "name_age_area", "photo_present", "status_timestamp"],
     }),
     note: "Missing-person report mirrored for restricted Respuesta VE dedupe/operator review.",
     data: {
@@ -465,6 +469,9 @@ export function missingPersonEnvelope(person: MissingPerson, request: Request): 
       contactPrivate: person.contact,
       status: person.status,
       hasPhoto: Boolean(person.photoUrl),
+      localGroupId: person.groupId ?? null,
+      localGroupReportCount: person.groupReportCount ?? 1,
+      localGroupStatusConflict: Boolean(person.groupStatusConflict),
       relationships: [{
         type: "person_last_seen_area",
         target: areaLabel(person.lastSeen),

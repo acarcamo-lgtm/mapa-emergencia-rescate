@@ -1,9 +1,22 @@
-import { eq, sql } from "drizzle-orm";
+import { eq, sql, type SQL } from "drizzle-orm";
 import { getDb, hasDbEnv, schema } from "./drizzle";
+import {
+  parsePhotoDataUrl,
+  photoHashKey,
+} from "./photo-hash";
+import {
+  materializedPersonGroup,
+  personGroupSignal,
+  representativeForGroup,
+  summarizePersonGroup,
+  type PersonGroupAssignment,
+  type PersonGroupMatchKind,
+  type PersonGroupMemberSummary,
+} from "./person-groups";
 import { isR2Configured, uploadPhotoDataUrl } from "./r2";
 import type { ExternalPerson } from "./sync/types";
 
-const { missingPersons } = schema;
+const { missingPersons, missingPersonImageHashes } = schema;
 
 /**
  * Normaliza el resultado de `getDb().execute()` a un arreglo de filas. El driver
@@ -24,6 +37,10 @@ export interface MissingPerson {
   description: string;
   lastSeen: string;
   contact: string;
+  /** Fuente pública/procedencia del reporte cuando viene de una integración. */
+  source?: string | null;
+  /** URL pública de la fuente original, si existe y es segura para mostrar. */
+  sourceUrl?: string | null;
   /** URL del endpoint que sirve la foto, o null si no hay foto. */
   photoUrl: string | null;
   status: MissingStatus;
@@ -32,6 +49,18 @@ export interface MissingPerson {
   /** URL del endpoint que sirve la foto-prueba de la resolución, si hay. */
   resolutionPhotoUrl: string | null;
   resolvedAt: number | null;
+  /** ID interno del grupo no destructivo de reportes que parecen referirse a la misma persona. */
+  groupId?: string | null;
+  /** Señal que produjo el grupo; no implica verificación manual. */
+  groupMatchKind?: PersonGroupMatchKind | null;
+  /** Cantidad de reportes preservados dentro del grupo. */
+  groupReportCount?: number;
+  /** Hay al menos una señal restringida de documento en el grupo. */
+  groupHasIdentityDocument?: boolean;
+  /** Hay reportes activos y localizados dentro del mismo grupo. */
+  groupStatusConflict?: boolean;
+  /** Reportes que componen el grupo cuando se pide el listado agrupado. */
+  groupMembers?: PersonGroupMemberSummary[];
   createdAt: number;
 }
 
@@ -122,9 +151,12 @@ function accentSearchReady(): Promise<boolean> {
 
 interface MemoryRecord extends MissingPerson {
   photo: string | null;
+  photoHash: string | null;
   resolutionPhoto: string | null;
+  resolutionPhotoHash: string | null;
 }
 const memoryStore = new Map<string, MemoryRecord>();
+const memoryPhotoHashes = new Map<string, { missingPersonId: string; purpose: string }>();
 
 // Tipo de fila tal como sale del builder para las columnas que seleccionamos
 // (has_photo / has_resolution_photo se derivan en SQL, no son columnas reales).
@@ -136,6 +168,8 @@ type Row = {
   description: string;
   last_seen: string;
   contact: string;
+  source?: string | null;
+  source_url?: string | null;
   has_photo: boolean;
   photo_external_url: string | null;
   status: string | null;
@@ -143,9 +177,26 @@ type Row = {
   has_resolution_photo: boolean;
   resolved_at: string | number | null;
   created_at: string | number;
+  person_group_id?: string | null;
+  group_match_kind?: PersonGroupMatchKind | null;
+  group_report_count?: string | number | null;
+  group_has_identity_document?: boolean | null;
+  group_status_conflict?: boolean | null;
   lat?: number | null;
   lng?: number | null;
 };
+
+function publicSourceUrl(value: string | null | undefined): string | null {
+  if (!value) return null;
+  try {
+    const url = new URL(value);
+    return url.protocol === "http:" || url.protocol === "https:"
+      ? url.toString()
+      : null;
+  } catch {
+    return null;
+  }
+}
 
 function rowToPerson(row: Row): MissingPerson {
   const photoUrl = row.has_photo
@@ -161,6 +212,8 @@ function rowToPerson(row: Row): MissingPerson {
     description: row.description,
     lastSeen: row.last_seen,
     contact: row.contact,
+    source: row.source ?? null,
+    sourceUrl: publicSourceUrl(row.source_url),
     photoUrl,
     status: (row.status === "found" ? "found" : "active") as MissingStatus,
     resolutionNote: row.resolution_note ?? null,
@@ -168,6 +221,14 @@ function rowToPerson(row: Row): MissingPerson {
       ? `/api/missing/${row.id}/resolution-photo`
       : null,
     resolvedAt: row.resolved_at !== null ? Number(row.resolved_at) : null,
+    groupId: row.person_group_id ?? null,
+    groupMatchKind: row.group_match_kind ?? null,
+    groupReportCount:
+      row.group_report_count === null || row.group_report_count === undefined
+        ? undefined
+        : Number(row.group_report_count),
+    groupHasIdentityDocument: row.group_has_identity_document ?? undefined,
+    groupStatusConflict: row.group_status_conflict ?? undefined,
     createdAt: Number(row.created_at),
   };
 }
@@ -181,7 +242,7 @@ function normalizeAge(age: NewMissingPerson["age"]): number | null {
 
 /** Valida que la cadena sea un data URL de imagen soportada. */
 export function isValidPhotoDataUrl(photo: string): boolean {
-  return /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(photo);
+  return parsePhotoDataUrl(photo) !== null;
 }
 
 /**
@@ -196,12 +257,16 @@ const selectCols = {
   description: missingPersons.description,
   last_seen: missingPersons.lastSeen,
   contact: missingPersons.contact,
+  source: missingPersons.source,
+  source_url: missingPersons.sourceUrl,
   has_photo: sql<boolean>`(${missingPersons.photo} IS NOT NULL)`,
   photo_external_url: missingPersons.photoExternalUrl,
   status: missingPersons.status,
   resolution_note: missingPersons.resolutionNote,
   has_resolution_photo: sql<boolean>`(${missingPersons.resolutionPhoto} IS NOT NULL)`,
   resolved_at: missingPersons.resolvedAt,
+  person_group_id: missingPersons.personGroupId,
+  group_match_kind: missingPersons.groupMatchKind,
   created_at: missingPersons.createdAt,
 } as const;
 
@@ -230,7 +295,7 @@ export async function listMissing(
   }
   return [...memoryStore.values()]
     .filter((m) => includeFound || m.status !== "found")
-    .map(({ photo: _photo, resolutionPhoto: _rp, ...rest }) => rest)
+    .map(({ photo: _photo, photoHash: _ph, resolutionPhoto: _rp, resolutionPhotoHash: _rph, ...rest }) => rest)
     .sort((a, b) => b.createdAt - a.createdAt);
 }
 
@@ -279,6 +344,141 @@ function searchTerms(search: string | undefined): string[] {
     .split(/\s+/)
     .filter((t) => t.length >= MIN_SEARCH_LEN)
     .slice(0, 8);
+}
+
+export class DuplicatePhotoError extends Error {
+  readonly code = "duplicate_photo";
+  readonly existingPersonId: string | null;
+
+  constructor(existingPersonId: string | null = null) {
+    super("La foto ya existe en otro reporte.");
+    this.name = "DuplicatePhotoError";
+    this.existingPersonId = existingPersonId;
+  }
+}
+
+export function isDuplicatePhotoError(error: unknown): error is DuplicatePhotoError {
+  return (
+    error instanceof DuplicatePhotoError ||
+    (typeof error === "object" &&
+      error !== null &&
+      "code" in error &&
+      (error as { code?: unknown }).code === "duplicate_photo")
+  );
+}
+
+function isUniqueViolation(error: unknown): boolean {
+  if (typeof error !== "object" || error === null) return false;
+  const candidate = error as { code?: unknown; cause?: unknown; message?: unknown };
+  if (candidate.code === "23505") return true;
+  if (
+    typeof candidate.cause === "object" &&
+    candidate.cause !== null &&
+    (candidate.cause as { code?: unknown }).code === "23505"
+  ) {
+    return true;
+  }
+  return (
+    typeof candidate.message === "string" &&
+    candidate.message.includes("missing_person_image_hashes")
+  );
+}
+
+function duplicatePhotoResponseId(photoHash: string): string | null {
+  return memoryPhotoHashes.get(photoHash)?.missingPersonId ?? null;
+}
+
+function assignGroupFields(
+  person: MissingPerson,
+  group: PersonGroupAssignment,
+): MissingPerson {
+  return {
+    ...person,
+    groupId: group.groupId,
+    groupMatchKind: group.matchKind,
+    groupReportCount: person.groupReportCount ?? 1,
+    groupHasIdentityDocument: person.groupHasIdentityDocument ?? false,
+    groupStatusConflict: person.groupStatusConflict ?? false,
+  };
+}
+
+function groupedRepresentatives(
+  people: MissingPerson[],
+  preferredStatus?: MissingStatus,
+): MissingPerson[] {
+  const groups = new Map<string, MissingPerson[]>();
+  for (const person of people) {
+    const groupId = person.groupId ?? person.id;
+    groups.set(groupId, [...(groups.get(groupId) ?? []), person]);
+  }
+
+  return [...groups.entries()]
+    .map(([groupId, members]) => {
+      const summary = summarizePersonGroup(groupId, members);
+      const representative = representativeForGroup(members, preferredStatus);
+      return {
+        ...representative,
+        groupId: summary.groupId,
+        groupMatchKind: summary.matchKind,
+        groupReportCount: summary.reportCount,
+        groupHasIdentityDocument: summary.hasIdentityDocument,
+        groupStatusConflict: summary.statusConflict,
+        groupMembers: summary.members,
+      };
+    })
+    .sort((a, b) => {
+      const aTime = a.status === "found" ? (a.resolvedAt ?? a.createdAt) : a.createdAt;
+      const bTime = b.status === "found" ? (b.resolvedAt ?? b.createdAt) : b.createdAt;
+      return bTime - aTime;
+    });
+}
+
+function refreshMissingPersonGroupsCte(
+  membersSql: SQL,
+  now: number,
+): SQL {
+  return sql`group_refresh AS (
+    INSERT INTO missing_person_groups (
+      id,
+      display_name,
+      normalized_name,
+      representative_area,
+      status,
+      report_count,
+      has_identity_document,
+      status_conflict,
+      created_at,
+      updated_at
+    )
+    SELECT
+      person_group_id,
+      COALESCE((array_agg(name ORDER BY created_at DESC))[1], ''),
+      COALESCE((array_agg(lower(trim(name)) ORDER BY created_at DESC))[1], ''),
+      COALESCE((array_agg(last_seen ORDER BY created_at DESC))[1], ''),
+      CASE WHEN count(*) FILTER (WHERE COALESCE(status, 'active') = 'active') > 0
+        THEN 'active'
+        ELSE 'found'
+      END,
+      count(*)::int,
+      bool_or(identity_document_hash IS NOT NULL),
+      count(DISTINCT COALESCE(status, 'active')) > 1,
+      ${now},
+      ${now}
+    FROM (${membersSql}) group_members
+    WHERE person_group_id IS NOT NULL
+    GROUP BY person_group_id
+    HAVING count(*) > 0
+    ON CONFLICT (id) DO UPDATE SET
+      display_name = EXCLUDED.display_name,
+      normalized_name = EXCLUDED.normalized_name,
+      representative_area = EXCLUDED.representative_area,
+      status = EXCLUDED.status,
+      report_count = EXCLUDED.report_count,
+      has_identity_document = EXCLUDED.has_identity_document,
+      status_conflict = EXCLUDED.status_conflict,
+      updated_at = EXCLUDED.updated_at
+    RETURNING id
+  )`;
 }
 
 /**
@@ -342,13 +542,18 @@ export async function listMissingPage(
     const offset = (page - 1) * pageSize;
 
     const listRes = await db.execute(
-      sql`SELECT id, name, age, description, last_seen, contact,
+      sql`SELECT id, name, age, nationality, description, last_seen, contact,
+                 source,
+                 source_url,
                  (photo IS NOT NULL) AS has_photo,
                  photo_external_url,
                  status,
                  resolution_note,
                  (resolution_photo IS NOT NULL) AS has_resolution_photo,
-                 resolved_at, created_at
+                 resolved_at,
+                 person_group_id,
+                 group_match_kind,
+                 created_at
           FROM missing_persons ${whereSql} ORDER BY ${orderSql} LIMIT ${pageSize} OFFSET ${offset}`,
     );
     const rows = execRows<Row>(listRes);
@@ -371,7 +576,7 @@ export async function listMissingPage(
         ? (b.resolvedAt ?? b.createdAt) - (a.resolvedAt ?? a.createdAt)
         : b.createdAt - a.createdAt,
     )
-    .map(({ photo: _photo, resolutionPhoto: _rp, ...rest }) => rest);
+    .map(({ photo: _photo, photoHash: _ph, resolutionPhoto: _rp, resolutionPhotoHash: _rph, ...rest }) => rest);
 
   const total = filtered.length;
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
@@ -379,6 +584,198 @@ export async function listMissingPage(
   const offset = (page - 1) * pageSize;
   return {
     people: filtered.slice(offset, offset + pageSize),
+    total,
+    page,
+    pageSize,
+    totalPages,
+    totalCapped: false,
+  };
+}
+
+export async function listMissingGroupsPage(
+  params: ListMissingPageParams = {},
+): Promise<MissingPageResult> {
+  const status = params.status ?? "active";
+  const pageSize = clampInt(params.pageSize, 1, MAX_PAGE_SIZE, DEFAULT_PAGE_SIZE);
+  const requestedPage = clampInt(params.page, 1, Number.MAX_SAFE_INTEGER, 1);
+  const rawTerms = searchTerms(params.search);
+
+  if (hasDbEnv()) {
+    const db = getDb();
+    const useAccent = await accentSearchReady();
+    const conditions: ReturnType<typeof sql>[] = [];
+
+    if (status !== "all") {
+      conditions.push(sql`status = ${status}`);
+    }
+
+    const fieldExpr = useAccent
+      ? sql`f_unaccent(name || ' ' || last_seen || ' ' || coalesce(description, ''))`
+      : sql`lower(name || ' ' || last_seen || ' ' || coalesce(description, ''))`;
+    const terms = useAccent ? rawTerms.map(stripAccents) : rawTerms;
+    for (const term of terms) {
+      conditions.push(sql`${fieldExpr} ILIKE ${`%${term}%`}`);
+    }
+
+    const whereSql = conditions.length
+      ? sql`WHERE ${sql.join(conditions, sql` AND `)}`
+      : sql``;
+    const visibleMembersWhereSql =
+      status === "all" ? sql`` : sql`WHERE status = ${status}`;
+    const hasSearch = terms.length > 0;
+    const countLimitSql = hasSearch ? sql`LIMIT ${SEARCH_COUNT_CAP}` : sql``;
+    const countRes = await db.execute(sql`
+      SELECT count(*)::int AS n
+      FROM (
+        SELECT 1
+        FROM missing_persons ${whereSql}
+        GROUP BY COALESCE(person_group_id, id)
+        ${countLimitSql}
+      ) grouped
+    `);
+    const total = execRows<{ n: number }>(countRes)[0]?.n ?? 0;
+    const totalCapped = hasSearch && total >= SEARCH_COUNT_CAP;
+    const totalPages = Math.max(1, Math.ceil(total / pageSize));
+    const page = Math.min(requestedPage, totalPages);
+    const offset = (page - 1) * pageSize;
+
+    const listRes = await db.execute(sql`
+      WITH filtered AS (
+        SELECT id, name, age, nationality, description, last_seen, contact,
+               source,
+               source_url,
+               (photo IS NOT NULL) AS has_photo,
+               photo_external_url,
+               COALESCE(status, 'active') AS status,
+               resolution_note,
+               (resolution_photo IS NOT NULL) AS has_resolution_photo,
+               resolved_at,
+               COALESCE(person_group_id, id) AS person_group_id,
+               group_match_kind,
+               identity_document_hash,
+               created_at
+        FROM missing_persons ${whereSql}
+      ),
+      group_page AS (
+        SELECT person_group_id,
+               max(CASE WHEN status = 'found' THEN COALESCE(resolved_at, created_at) ELSE created_at END) AS sort_at
+        FROM filtered
+        GROUP BY person_group_id
+        ORDER BY sort_at DESC, person_group_id DESC
+        LIMIT ${pageSize} OFFSET ${offset}
+      ),
+      all_members AS (
+        SELECT mp.id,
+               mp.name,
+               mp.age,
+               mp.nationality,
+               mp.description,
+               mp.last_seen,
+               mp.contact,
+               mp.source,
+               mp.source_url,
+               (mp.photo IS NOT NULL) AS has_photo,
+               mp.photo_external_url,
+               COALESCE(mp.status, 'active') AS status,
+               mp.resolution_note,
+               (mp.resolution_photo IS NOT NULL) AS has_resolution_photo,
+               mp.resolved_at,
+               COALESCE(mp.person_group_id, mp.id) AS person_group_id,
+               mp.group_match_kind,
+               mp.identity_document_hash,
+               mp.created_at,
+               gp.sort_at
+        FROM missing_persons mp
+        JOIN group_page gp ON gp.person_group_id = COALESCE(mp.person_group_id, mp.id)
+      ),
+      members AS (
+        SELECT f.*,
+               count(*) OVER (PARTITION BY f.person_group_id)::int AS group_report_count,
+               bool_or(f.identity_document_hash IS NOT NULL) OVER (PARTITION BY f.person_group_id) AS group_has_identity_document,
+               (
+                 bool_or(f.status = 'active') OVER (PARTITION BY f.person_group_id)
+                 AND bool_or(f.status = 'found') OVER (PARTITION BY f.person_group_id)
+               ) AS group_status_conflict
+        FROM all_members f
+      )
+      SELECT id, name, age, nationality, description, last_seen, contact,
+             source, source_url,
+             has_photo, photo_external_url, status, resolution_note,
+             has_resolution_photo, resolved_at, person_group_id, group_match_kind,
+             group_report_count, group_has_identity_document, group_status_conflict,
+             created_at
+      FROM members
+      ${visibleMembersWhereSql}
+      ORDER BY sort_at DESC,
+               person_group_id DESC,
+               CASE WHEN status = 'active' THEN 0 ELSE 1 END,
+               COALESCE(resolved_at, created_at) DESC,
+               id DESC
+    `);
+    const rows = execRows<Row>(listRes);
+
+    return {
+      people: groupedRepresentatives(
+        rows.map(rowToPerson),
+        status === "all" ? undefined : status,
+      ),
+      total,
+      page,
+      pageSize,
+      totalPages,
+      totalCapped,
+    };
+  }
+
+  const statuses = status === "all" ? ["active", "found"] : [status];
+  const terms = rawTerms.map(stripAccents);
+  const matching = [...memoryStore.values()]
+    .filter((m) => statuses.includes(m.status))
+    .filter((m) => {
+      if (terms.length === 0) return true;
+      const hay = stripAccents(`${m.name} ${m.lastSeen} ${m.description}`.toLowerCase());
+      return terms.every((t) => hay.includes(t));
+    });
+  const selectedGroupIds = new Set(
+    matching.map((person) => person.groupId ?? person.id),
+  );
+  const allSelected = [...memoryStore.values()]
+    .filter((person) => selectedGroupIds.has(person.groupId ?? person.id))
+    .map(({ photo: _photo, photoHash: _ph, resolutionPhoto: _rp, resolutionPhotoHash: _rph, ...rest }) => rest);
+  const summariesByGroup = new Map(
+    [...selectedGroupIds].map((groupId) => [
+      groupId,
+      summarizePersonGroup(
+        groupId,
+        allSelected.filter((person) => (person.groupId ?? person.id) === groupId),
+      ),
+    ]),
+  );
+  const filtered = allSelected
+    .filter((person) => status === "all" || person.status === status)
+    .map((person) => {
+      const summary = summariesByGroup.get(person.groupId ?? person.id);
+      return {
+        ...person,
+        groupReportCount: summary?.reportCount ?? person.groupReportCount,
+        groupHasIdentityDocument:
+          summary?.hasIdentityDocument ?? person.groupHasIdentityDocument,
+        groupStatusConflict:
+          summary?.statusConflict ?? person.groupStatusConflict,
+      };
+    });
+
+  const grouped = groupedRepresentatives(
+    filtered,
+    status === "all" ? undefined : status,
+  );
+  const total = grouped.length;
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const page = Math.min(requestedPage, totalPages);
+  const offset = (page - 1) * pageSize;
+
+  return {
+    people: grouped.slice(offset, offset + pageSize),
     total,
     page,
     pageSize,
@@ -405,23 +802,47 @@ export async function addMissing(
   const contact = (input.contact ?? "").trim().slice(0, MAX_CONTACT);
   const photo =
     typeof input.photo === "string" && input.photo ? input.photo : null;
+  const parsedPhoto = photo ? parsePhotoDataUrl(photo) : null;
+  if (photo && !parsedPhoto) {
+    throw new Error("Foto inválida: se esperaba JPG, PNG o WebP en base64.");
+  }
+  const photoHash = parsedPhoto?.hash ?? null;
   const createdAt = Date.now();
   const isFound = input.reportType === "found";
   const status: MissingStatus = isFound ? "found" : "active";
   const resolutionNote = isFound ? description : null;
   const resolvedAt = isFound ? createdAt : null;
+  const groupSignal = personGroupSignal({ name, age, lastSeen });
+  const group = materializedPersonGroup(groupSignal);
+
+  if (photoHash) {
+    if (hasDbEnv()) {
+      const existing = await getDb()
+        .select({ missingPersonId: missingPersonImageHashes.missingPersonId })
+        .from(missingPersonImageHashes)
+        .where(eq(missingPersonImageHashes.photoHash, photoHash));
+      if (existing[0]) throw new DuplicatePhotoError(existing[0].missingPersonId);
+    } else {
+      const existingId = duplicatePhotoResponseId(photoHash);
+      if (existingId) throw new DuplicatePhotoError(existingId);
+    }
+  }
 
   // Si R2 está configurado, la foto va al CDN y guardamos la URL (no base64).
   // Hard-fail: si la subida falla, el error sube y el endpoint no confirma.
   let stored = photo;
   let migratedAt: number | null = null;
   if (photo && isR2Configured()) {
-    stored = await uploadPhotoDataUrl(photo, "missing_persons", id);
+    stored = await uploadPhotoDataUrl(
+      photo,
+      "missing_persons",
+      photoHash ? photoHashKey(photoHash) : id,
+    );
     migratedAt = Date.now();
   }
 
-  if (hasDbEnv()) {
-    await getDb().insert(missingPersons).values({
+  const person = assignGroupFields(
+    {
       id,
       name,
       age,
@@ -429,48 +850,138 @@ export async function addMissing(
       description,
       lastSeen,
       contact,
-      photo: stored,
-      photoMigratedAt: migratedAt,
-      createdAt,
-      status,
-      resolutionNote,
-      resolvedAt,
-    });
-  } else {
-    memoryStore.set(id, {
-      id,
-      name,
-      age,
-      nationality,
-      description,
-      lastSeen,
-      contact,
-      photo: stored,
       photoUrl: photo ? `/api/missing/${id}/photo` : null,
       status,
       resolutionNote,
-      resolutionPhoto: null,
       resolutionPhotoUrl: null,
       resolvedAt,
       createdAt,
+    },
+    group,
+  );
+
+  if (hasDbEnv()) {
+    const db = getDb();
+    try {
+      await db.execute(sql`
+        WITH inserted_person AS (
+          INSERT INTO missing_persons (
+            id,
+            name,
+            age,
+            nationality,
+            description,
+            last_seen,
+            contact,
+            photo,
+            photo_hash,
+            photo_migrated_at,
+            person_group_id,
+            group_match_kind,
+            created_at,
+            status,
+            resolution_note,
+            resolved_at
+          ) VALUES (
+            ${id},
+            ${name},
+            ${age},
+            ${nationality},
+            ${description},
+            ${lastSeen},
+            ${contact},
+            ${stored},
+            ${photoHash},
+            ${migratedAt},
+            ${group.groupId},
+            ${group.matchKind},
+            ${createdAt},
+            ${status},
+            ${resolutionNote},
+            ${resolvedAt}
+          )
+          RETURNING id,
+                    name,
+                    age,
+                    nationality,
+                    description,
+                    last_seen,
+                    contact,
+                    source,
+                    source_url,
+                    (photo IS NOT NULL) AS has_photo,
+                    photo_external_url,
+                    COALESCE(status, 'active') AS status,
+                    resolution_note,
+                    (resolution_photo IS NOT NULL) AS has_resolution_photo,
+                    resolved_at,
+                    person_group_id,
+                    group_match_kind,
+                    identity_document_hash,
+                    created_at
+        ),
+        image_hash AS (
+          INSERT INTO missing_person_image_hashes (
+            photo_hash,
+            missing_person_id,
+            purpose,
+            created_at
+          )
+          SELECT ${photoHash}::text,
+                 id,
+                 'missing_photo',
+                 ${createdAt}
+          FROM inserted_person
+          WHERE ${photoHash}::text IS NOT NULL
+          RETURNING photo_hash
+        ),
+        ${refreshMissingPersonGroupsCte(
+          sql`
+            SELECT person_group_id,
+                   name,
+                   last_seen,
+                   status,
+                   identity_document_hash,
+                   created_at
+            FROM missing_persons
+            WHERE person_group_id = ${group.groupId}
+            UNION ALL
+            SELECT person_group_id,
+                   name,
+                   last_seen,
+                   status,
+                   identity_document_hash,
+                   created_at
+            FROM inserted_person
+            WHERE person_group_id IS NOT NULL
+          `,
+          createdAt,
+        )}
+        SELECT id FROM inserted_person
+      `);
+    } catch (error) {
+      if (photoHash && isUniqueViolation(error)) {
+        throw new DuplicatePhotoError(null);
+      }
+      throw error;
+    }
+  } else {
+    if (photoHash) {
+      memoryPhotoHashes.set(photoHash, {
+        missingPersonId: id,
+        purpose: "missing_photo",
+      });
+    }
+    memoryStore.set(id, {
+      ...person,
+      photo: stored,
+      photoHash,
+      resolutionPhoto: null,
+      resolutionPhotoHash: null,
     });
   }
 
-  return {
-    id,
-    name,
-    age,
-    nationality,
-    description,
-    lastSeen,
-    contact,
-    photoUrl: photo ? `/api/missing/${id}/photo` : null,
-    status,
-    resolutionNote,
-    resolutionPhotoUrl: null,
-    resolvedAt,
-    createdAt,
-  };
+  return person;
 }
 
 export const MAX_RESOLUTION_NOTE = 600;
@@ -491,46 +1002,146 @@ export async function markMissingFound(
   if (!cleanNote) throw new Error("Falta la descripción de cómo se comunicaron.");
   const validPhoto =
     resolutionPhoto && isValidPhotoDataUrl(resolutionPhoto) ? resolutionPhoto : null;
+  const parsedPhoto = validPhoto ? parsePhotoDataUrl(validPhoto) : null;
+  const resolutionPhotoHash = parsedPhoto?.hash ?? null;
   const resolvedAt = Date.now();
+  if (resolutionPhotoHash) {
+    if (hasDbEnv()) {
+      const existing = await getDb()
+        .select({ missingPersonId: missingPersonImageHashes.missingPersonId })
+        .from(missingPersonImageHashes)
+        .where(eq(missingPersonImageHashes.photoHash, resolutionPhotoHash));
+      if (existing[0]) throw new DuplicatePhotoError(existing[0].missingPersonId);
+    } else {
+      const existingId = duplicatePhotoResponseId(resolutionPhotoHash);
+      if (existingId) throw new DuplicatePhotoError(existingId);
+    }
+  }
   // Foto-prueba a R2 cuando está configurado (hard-fail). `photo` será la URL.
   let photo = validPhoto;
   if (validPhoto && isR2Configured()) {
-    photo = await uploadPhotoDataUrl(validPhoto, "resolution", id);
+    photo = await uploadPhotoDataUrl(
+      validPhoto,
+      "resolution",
+      resolutionPhotoHash ? photoHashKey(resolutionPhotoHash) : id,
+    );
   }
 
   if (hasDbEnv()) {
     // El builder de update().set().where().returning() con alias `sql` no
     // resuelve sobre el tipo unión de drivers (neon-http | node-postgres);
     // usamos el escape `sql` preservando la semántica exacta del UPDATE.
-    const result = await getDb().execute(
-      sql`UPDATE missing_persons
-          SET status = 'found',
-              resolution_note = ${cleanNote},
-              resolution_photo = ${photo},
-              resolved_at = ${resolvedAt}
-          WHERE id = ${id} AND COALESCE(status, 'active') = 'active'
-          RETURNING id, name, age, nationality, description, last_seen, contact,
-                    (photo IS NOT NULL) AS has_photo,
-                    photo_external_url,
-                    COALESCE(status, 'active') AS status,
-                    resolution_note,
-                    (resolution_photo IS NOT NULL) AS has_resolution_photo,
-                    resolved_at,
-                    created_at`,
-    );
-    const rows = execRows<Row>(result);
-    return rows.length > 0 ? rowToPerson(rows[0]) : null;
+    const db = getDb();
+    try {
+      const result = await db.execute(sql`
+        WITH updated_person AS (
+          UPDATE missing_persons
+              SET status = 'found',
+                  resolution_note = ${cleanNote},
+                  resolution_photo = ${photo},
+                  resolution_photo_hash = ${resolutionPhotoHash},
+                  resolved_at = ${resolvedAt}
+              WHERE id = ${id} AND COALESCE(status, 'active') = 'active'
+              RETURNING id, name, age, nationality, description, last_seen, contact,
+                        source,
+                        source_url,
+                        (photo IS NOT NULL) AS has_photo,
+                        photo_external_url,
+                        COALESCE(status, 'active') AS status,
+                        resolution_note,
+                        (resolution_photo IS NOT NULL) AS has_resolution_photo,
+                        resolved_at,
+                        person_group_id,
+                        group_match_kind,
+                        identity_document_hash,
+                        created_at
+        ),
+        image_hash AS (
+          INSERT INTO missing_person_image_hashes (
+            photo_hash,
+            missing_person_id,
+            purpose,
+            created_at
+          )
+          SELECT ${resolutionPhotoHash}::text,
+                 id,
+                 'resolution_photo',
+                 ${resolvedAt}
+          FROM updated_person
+          WHERE ${resolutionPhotoHash}::text IS NOT NULL
+          RETURNING photo_hash
+        ),
+        ${refreshMissingPersonGroupsCte(
+          sql`
+            SELECT person_group_id,
+                   name,
+                   last_seen,
+                   COALESCE(status, 'active') AS status,
+                   identity_document_hash,
+                   created_at
+            FROM missing_persons
+            WHERE person_group_id = (
+              SELECT person_group_id FROM updated_person LIMIT 1
+            )
+              AND id <> ${id}
+            UNION ALL
+            SELECT person_group_id,
+                   name,
+                   last_seen,
+                   status,
+                   identity_document_hash,
+                   created_at
+            FROM updated_person
+            WHERE person_group_id IS NOT NULL
+          `,
+          resolvedAt,
+        )}
+        SELECT id,
+               name,
+               age,
+               nationality,
+               description,
+               last_seen,
+               contact,
+               source,
+               source_url,
+               has_photo,
+               photo_external_url,
+               status,
+               resolution_note,
+               has_resolution_photo,
+               resolved_at,
+               person_group_id,
+               group_match_kind,
+               created_at
+        FROM updated_person
+      `);
+      const rows = execRows<Row>(result);
+      return rows.length > 0 ? rowToPerson(rows[0]) : null;
+    } catch (error) {
+      if (resolutionPhotoHash && isUniqueViolation(error)) {
+        throw new DuplicatePhotoError(null);
+      }
+      throw error;
+    }
   }
   const record = memoryStore.get(id);
   if (!record || record.status === "found") return null;
+  if (resolutionPhotoHash) {
+    memoryPhotoHashes.set(resolutionPhotoHash, {
+      missingPersonId: id,
+      purpose: "resolution_photo",
+    });
+  }
   record.status = "found";
   record.resolutionNote = cleanNote;
   record.resolutionPhoto = photo;
+  record.resolutionPhotoHash = resolutionPhotoHash;
   record.resolutionPhotoUrl = photo
     ? `/api/missing/${id}/resolution-photo`
     : null;
   record.resolvedAt = resolvedAt;
-  const { photo: _p, resolutionPhoto: _rp, ...exposed } = record;
+  const { photo: _p, photoHash: _ph, resolutionPhoto: _rp, resolutionPhotoHash: _rph, ...exposed } = record;
   return exposed;
 }
 
@@ -538,22 +1149,65 @@ export async function restoreMissing(id: string): Promise<boolean> {
   if (hasDbEnv()) {
     // Escape `sql` por el tipo unión de drivers (ver markMissingFound). Misma
     // semántica que el UPDATE ... RETURNING id previo.
-    const result = await getDb().execute(
-      sql`UPDATE missing_persons
-          SET status = 'active',
-              resolution_note = NULL,
-              resolution_photo = NULL,
-              resolved_at = NULL
-          WHERE id = ${id} AND COALESCE(status, 'active') = 'found'
-          RETURNING id`,
-    );
-    return execRows<{ id: string }>(result).length > 0;
+    const result = await getDb().execute(sql`
+      WITH restored_person AS (
+        UPDATE missing_persons
+            SET status = 'active',
+                resolution_note = NULL,
+                resolution_photo = NULL,
+                resolution_photo_hash = NULL,
+                resolved_at = NULL
+            WHERE id = ${id} AND COALESCE(status, 'active') = 'found'
+            RETURNING id,
+                      person_group_id,
+                      name,
+                      last_seen,
+                      COALESCE(status, 'active') AS status,
+                      identity_document_hash,
+                      created_at
+      ),
+      deleted_hash AS (
+        DELETE FROM missing_person_image_hashes
+        WHERE missing_person_id IN (SELECT id FROM restored_person)
+          AND purpose = 'resolution_photo'
+        RETURNING photo_hash
+      ),
+      ${refreshMissingPersonGroupsCte(
+        sql`
+          SELECT person_group_id,
+                 name,
+                 last_seen,
+                 COALESCE(status, 'active') AS status,
+                 identity_document_hash,
+                 created_at
+          FROM missing_persons
+          WHERE person_group_id = (
+            SELECT person_group_id FROM restored_person LIMIT 1
+          )
+            AND id <> ${id}
+          UNION ALL
+          SELECT person_group_id,
+                 name,
+                 last_seen,
+                 status,
+                 identity_document_hash,
+                 created_at
+          FROM restored_person
+          WHERE person_group_id IS NOT NULL
+        `,
+        Date.now(),
+      )}
+      SELECT EXISTS(SELECT 1 FROM restored_person) AS restored
+    `);
+    return Boolean(execRows<{ restored: boolean }>(result)[0]?.restored);
   }
   const record = memoryStore.get(id);
   if (!record || record.status !== "found") return false;
+  if (record.resolutionPhotoHash) memoryPhotoHashes.delete(record.resolutionPhotoHash);
   record.status = "active";
   record.resolutionNote = null;
   record.resolutionPhoto = null;
+  record.resolutionPhotoHash = null;
   record.resolutionPhotoUrl = null;
   record.resolvedAt = null;
   return true;
@@ -632,11 +1286,50 @@ export async function removeMissing(id: string): Promise<boolean> {
   if (hasDbEnv()) {
     // Escape `sql` por el tipo unión de drivers (ver chat.removeMessage). Misma
     // semántica que el DELETE ... RETURNING id previo.
-    const result = await getDb().execute(
-      sql`DELETE FROM missing_persons WHERE id = ${id} RETURNING id`,
-    );
-    return execRows<{ id: string }>(result).length > 0;
+    const result = await getDb().execute(sql`
+      WITH deleted_person AS (
+        DELETE FROM missing_persons
+        WHERE id = ${id}
+        RETURNING id, person_group_id
+      ),
+      ${refreshMissingPersonGroupsCte(
+        sql`
+          SELECT person_group_id,
+                 name,
+                 last_seen,
+                 COALESCE(status, 'active') AS status,
+                 identity_document_hash,
+                 created_at
+          FROM missing_persons
+          WHERE person_group_id = (
+            SELECT person_group_id FROM deleted_person LIMIT 1
+          )
+            AND id <> ${id}
+        `,
+        Date.now(),
+      )},
+      empty_group_delete AS (
+        DELETE FROM missing_person_groups
+        WHERE id IN (
+          SELECT person_group_id
+          FROM deleted_person
+          WHERE person_group_id IS NOT NULL
+        )
+          AND NOT EXISTS (
+            SELECT 1
+            FROM missing_persons
+            WHERE person_group_id = missing_person_groups.id
+              AND id <> ${id}
+          )
+        RETURNING id
+      )
+      SELECT EXISTS(SELECT 1 FROM deleted_person) AS deleted
+    `);
+    return Boolean(execRows<{ deleted: boolean }>(result)[0]?.deleted);
   }
+  const record = memoryStore.get(id);
+  if (record?.photoHash) memoryPhotoHashes.delete(record.photoHash);
+  if (record?.resolutionPhotoHash) memoryPhotoHashes.delete(record.resolutionPhotoHash);
   return memoryStore.delete(id);
 }
 
@@ -779,7 +1472,8 @@ const MAX_BATCH_SIZE = 4000;
 const EXTERNAL_COLS = [
   "id", "name", "age", "description", "last_seen", "contact",
   "photo_external_url", "external_id", "source", "source_url",
-  "status", "resolution_note", "resolved_at", "created_at",
+  "person_group_id", "group_match_kind", "status", "resolution_note",
+  "resolved_at", "created_at",
 ] as const;
 
 /** Cláusula DO UPDATE: misma semántica que el upsert de una fila. */
@@ -792,6 +1486,8 @@ const CONFLICT_UPDATE_SET = `
   photo_external_url = COALESCE(missing_persons.photo_external_url, EXCLUDED.photo_external_url),
   source = COALESCE(missing_persons.source, EXCLUDED.source),
   source_url = COALESCE(missing_persons.source_url, EXCLUDED.source_url),
+  person_group_id = EXCLUDED.person_group_id,
+  group_match_kind = EXCLUDED.group_match_kind,
   status = EXCLUDED.status,
   resolution_note = COALESCE(EXCLUDED.resolution_note, missing_persons.resolution_note),
   resolved_at = COALESCE(EXCLUDED.resolved_at, missing_persons.resolved_at)`;
@@ -812,11 +1508,17 @@ function buildExternalRow(
   if (!externalId || !source || !name) return null;
 
   const status: MissingStatus = input.status === "found" ? "found" : "active";
+  const age = normalizeAge(input.age);
+  const group = materializedPersonGroup(personGroupSignal({
+    name,
+    age,
+    lastSeen: clipText(input.lastSeen, MAX_LAST_SEEN),
+  }));
   // El contacto solo llega si el adaptador decidió importarlo (ver RFC §6).
   const values: unknown[] = [
     crypto.randomUUID(),
     name,
-    normalizeAge(input.age),
+    age,
     clipText(input.description, MAX_DESCRIPTION),
     clipText(input.lastSeen, MAX_LAST_SEEN),
     clipText(input.contact, MAX_CONTACT),
@@ -826,6 +1528,8 @@ function buildExternalRow(
     externalId,
     source,
     typeof input.sourceUrl === "string" ? input.sourceUrl.slice(0, 300) : null,
+    group.groupId,
+    group.matchKind,
     status,
     status === "found" && input.resolutionNote
       ? clipText(input.resolutionNote, MAX_RESOLUTION_NOTE) || null
@@ -882,7 +1586,88 @@ export async function upsertExternalMissingBatch(
     const tuples = chunk.map(
       (values) => sql`(${sql.join(values.map((v) => sql`${v}`), sql`,`)})`,
     );
-    const query = sql`INSERT INTO missing_persons (${sql.raw(EXTERNAL_COLS.join(", "))}) VALUES ${sql.join(tuples, sql`,`)} ON CONFLICT (source, external_id) WHERE external_id IS NOT NULL DO UPDATE SET${sql.raw(CONFLICT_UPDATE_SET)} RETURNING (xmax = 0) AS inserted`;
+    const query = sql`
+      WITH input_rows (${sql.raw(EXTERNAL_COLS.join(", "))}) AS (
+        VALUES ${sql.join(tuples, sql`,`)}
+      ),
+      old_groups AS (
+        SELECT DISTINCT mp.person_group_id
+        FROM missing_persons mp
+        JOIN input_rows i
+          ON mp.source = i.source
+         AND mp.external_id = i.external_id
+        WHERE mp.external_id IS NOT NULL
+          AND mp.person_group_id IS NOT NULL
+      ),
+      upserted_rows AS (
+        INSERT INTO missing_persons (${sql.raw(EXTERNAL_COLS.join(", "))})
+        SELECT ${sql.raw(EXTERNAL_COLS.join(", "))} FROM input_rows
+        ON CONFLICT (source, external_id) WHERE external_id IS NOT NULL
+        DO UPDATE SET${sql.raw(CONFLICT_UPDATE_SET)}
+        RETURNING (xmax = 0) AS inserted,
+                  id,
+                  person_group_id,
+                  name,
+                  last_seen,
+                  COALESCE(status, 'active') AS status,
+                  identity_document_hash,
+                  created_at
+      ),
+      groups_to_refresh AS (
+        SELECT person_group_id FROM old_groups
+        UNION
+        SELECT person_group_id
+        FROM upserted_rows
+        WHERE person_group_id IS NOT NULL
+      ),
+      refresh_members AS (
+        SELECT person_group_id,
+               name,
+               last_seen,
+               COALESCE(status, 'active') AS status,
+               identity_document_hash,
+               created_at
+        FROM missing_persons
+        WHERE person_group_id IN (
+          SELECT person_group_id FROM groups_to_refresh
+        )
+          AND id NOT IN (SELECT id FROM upserted_rows)
+        UNION ALL
+        SELECT person_group_id,
+               name,
+               last_seen,
+               status,
+               identity_document_hash,
+               created_at
+        FROM upserted_rows
+        WHERE person_group_id IS NOT NULL
+      ),
+      ${refreshMissingPersonGroupsCte(
+        sql`
+          SELECT person_group_id,
+                 name,
+                 last_seen,
+                 status,
+                 identity_document_hash,
+                 created_at
+          FROM refresh_members
+        `,
+        Date.now(),
+      )},
+      empty_group_delete AS (
+        DELETE FROM missing_person_groups
+        WHERE id IN (
+          SELECT person_group_id FROM groups_to_refresh
+        )
+          AND NOT EXISTS (
+            SELECT 1
+            FROM refresh_members
+            WHERE refresh_members.person_group_id = missing_person_groups.id
+          )
+        RETURNING id
+      )
+      SELECT inserted FROM upserted_rows
+    `;
     try {
       const out = await db.execute(query);
       for (const r of execRows<{ inserted: boolean }>(out)) {

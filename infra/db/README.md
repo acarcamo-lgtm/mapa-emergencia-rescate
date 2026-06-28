@@ -5,13 +5,15 @@ the schema that lib/*.ts currently creates lazily at runtime. Moving it here
 makes the schema explicit, versioned, and migratable instead of scattered
 `CREATE TABLE IF NOT EXISTS` calls.
 
-## The 12 tables
+## Core tables
 
 | Table | Purpose | PK | Notable |
 |---|---|---|---|
 | `reports` | Citizen emergency reports (the map markers) | `id` text | `type`, lat/lng, `photo`, `confirmations`; idx on `created_at` |
 | `report_confirmations` | Per-IP "confirm" dedup for reports | (`report_id`,`ip_hash`) | composite PK |
-| `missing_persons` | Missing-people registry (+ external sync) | `id` text | `status`, resolution_*, `external_id`/`source` (synced), lat/lng |
+| `missing_persons` | Missing-people registry (+ external sync) | `id` text | `status`, resolution_*, `external_id`/`source` (synced), lat/lng, group/hash metadata |
+| `missing_person_groups` | Non-destructive public grouping summaries for likely same-person records | `id` text | report count, representative area, status conflict flag |
+| `missing_person_image_hashes` | Restricted exact-image hash registry for uploaded person photos/proofs | `photo_hash` text | **FK** `missing_person_id -> missing_persons(id)` ON DELETE CASCADE |
 | `chat_messages` | Public chat / threads | `id` text | `role`, `reply_to`, `thread_root_id`, `thread_bumped_at` |
 | `hospitals` | Hospital / facility directory | `id` text | `external_id` (partial-unique), `priority_zone`, `is_priority` |
 | `hospital_patients` | Patients per hospital | `id` text | **FK** `hospital_id → hospitals(id)` ON DELETE CASCADE |
@@ -29,10 +31,9 @@ makes the schema explicit, versioned, and migratable instead of scattered
 - **Timestamps**: epoch-**milliseconds** as `BIGINT` (`bigint mode:"number"`),
   not SQL `timestamp`. Stays within `Number.MAX_SAFE_INTEGER`.
 - **Coordinates**: `DOUBLE PRECISION`.
-- **Relations**: only one real FK (`hospital_patients → hospitals`). Everything
-  else is flat — by design, this app is CRUD + list queries, not a join-heavy
-  domain. (This is *why* a heavy ORM like Prisma would be overkill; Drizzle
-  gives typed schema + migrations without the abstraction tax.)
+- **Relations**: FKs are intentionally sparse (`hospital_patients -> hospitals`
+  and restricted image hashes -> `missing_persons`). Most public data remains
+  flat so old readers survive additive schema changes.
 
 ## Workflow
 

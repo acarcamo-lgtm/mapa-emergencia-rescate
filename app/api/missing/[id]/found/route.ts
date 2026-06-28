@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import {
+  isDuplicatePhotoError,
   isValidPhotoDataUrl,
   markMissingFound,
   MAX_PHOTO_CHARS,
@@ -62,6 +63,11 @@ export const dynamic = "force-dynamic";
  *             schema: { $ref: '#/components/schemas/Error' }
  *       429:
  *         description: Demasiadas solicitudes (rate limit)
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ *       409:
+ *         description: La foto de prueba ya existe en otro reporte
  *         content:
  *           application/json:
  *             schema: { $ref: '#/components/schemas/Error' }
@@ -134,7 +140,17 @@ export async function POST(
       );
     }
     return NextResponse.json({ person });
-  } catch {
+  } catch (error) {
+    if (isDuplicatePhotoError(error)) {
+      return NextResponse.json(
+        {
+          code: "duplicate_photo",
+          error:
+            "Ya recibimos esa imagen en otro reporte. Adjunta una prueba distinta para evitar duplicados.",
+        },
+        { status: 409 },
+      );
+    }
     // No exponemos err.message al cliente (puede filtrar detalles internos).
     return NextResponse.json(
       { error: "No se pudo actualizar. Inténtalo de nuevo." },

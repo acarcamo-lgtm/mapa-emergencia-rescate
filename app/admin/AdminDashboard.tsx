@@ -76,6 +76,12 @@ interface DuplicateReport {
   samePersonGroups: number;
   samePersonCollapsible: number;
   homonymGroups: number;
+  persistedGroups: number;
+  persistedGroupedReports: number;
+  statusConflictGroups: number;
+  imageHashes: number;
+  exactImageDuplicateGroups: number;
+  exactImageDuplicateReports: number;
   topGroups: DuplicateGroup[];
   generatedAt: number;
 }
@@ -899,6 +905,29 @@ export default function AdminDashboard() {
                     value={dupReport.collapsibleRows}
                     sub="si se colapsara todo"
                   />
+                  <MetricCard
+                    label="Grupos publicados"
+                    value={dupReport.persistedGroups}
+                    sub={`${dupReport.persistedGroupedReports} reportes agrupados`}
+                    accent="#2563eb"
+                  />
+                  <MetricCard
+                    label="Conflictos de estado"
+                    value={dupReport.statusConflictGroups}
+                    sub="activa/localizada en el mismo grupo"
+                    accent="#d97706"
+                  />
+                  <MetricCard
+                    label="Hashes de imagen"
+                    value={dupReport.imageHashes}
+                    sub="registro exacto restringido"
+                  />
+                  <MetricCard
+                    label="Fotos históricas repetidas"
+                    value={dupReport.exactImageDuplicateGroups}
+                    sub={`${dupReport.exactImageDuplicateReports} filas sobrantes`}
+                    accent="#7c3aed"
+                  />
                 </div>
 
                 <ul className="mt-3 max-h-96 divide-y divide-slate-100 overflow-y-auto rounded-lg border border-slate-100 text-xs">
@@ -927,9 +956,9 @@ export default function AdminDashboard() {
                   ))}
                 </ul>
                 <p className="mt-2 text-[11px] text-slate-400">
-                  Solo detección — no se modifica ni agrupa nada todavía.
-                  &quot;misma persona&quot; = edad consistente; &quot;homónimos&quot;
-                  = varias edades (probablemente personas distintas).
+                  El análisis por nombre es solo detección. Los grupos
+                  publicados vienen del modelo local no destructivo; las filas
+                  crudas siguen preservadas.
                 </p>
               </div>
             )}

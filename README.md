@@ -12,6 +12,8 @@ y **Neon Postgres**. Pensada para alto tráfico y para funcionar bien en móvil.
 - 3 tipos de marcadores: 🔴 Emergencia crítica, 🟡 Suministros, 🟢 Centro de acopio.
 - Panel lateral con lista de reportes, contadores y filtro por tipo.
 - Botón "Atendido" para limpiar reportes ya resueltos.
+- Directorio de personas desaparecidas/localizadas con agrupación no
+  destructiva de reportes probables de la misma persona.
 - Refresco automático cada 5 s (polling), pausado cuando la pestaña no está visible.
 
 ## Diseño
@@ -109,6 +111,30 @@ correcto, pero no convierten el dato en canónico ni disparan merges automático
 Los operadores promueven personas por `/api/v1/persons`, hospitales/canales/
 necesidades por `/api/v1/entities`, y dejan pacientes o evidencia médica en
 revisión restringida salvo que exista una proyección pública segura.
+
+En el directorio local de personas, las fotos subidas por formularios públicos
+se hashean en el servidor antes de guardarse. Si los bytes exactos de una imagen
+ya fueron recibidos, `/api/missing` responde `409 duplicate_photo`, no crea otro
+reporte y no envía espejo a Respuesta VE. Las coincidencias por nombre+edad o
+nombre+ubicación se agrupan sin borrar filas crudas; las coincidencias por solo
+nombre se conservan como señal débil (`groupMatchKind: "name_only"`) pero no
+crean un grupo público compartido. `GET /api/missing?grouped=1` devuelve una
+ficha representante con conteo de reportes y advertencias si una fuente dice
+localizada mientras otra sigue activa. En vistas filtradas (`active` o `found`)
+solo se devuelven filas de miembros de ese estado; `status=all` es la superficie
+explícita para ver ambos lados del grupo. Los hashes de foto/documento nunca
+salen en respuestas públicas.
+
+Para rellenar grupos e hashes de registros históricos con fotos locales en
+base64, ejecuta:
+
+```bash
+npm run missing:backfill-groups -- --dry-run --limit 50
+npm run missing:backfill-groups -- --limit 500
+```
+
+El backfill no descarga fotos externas o del CDN; solo usa bytes ya presentes en
+la base.
 
 La vista `/coordinacion` agrupa la experiencia local como una capa normalizada:
 reportes, personas, hospitales, pacientes y canales de apoyo internacional se

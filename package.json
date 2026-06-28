@@ -15,6 +15,7 @@
     "migrate:enqueue": "node --import tsx worker/enqueue.ts",
     "migrate": "node --import tsx worker/migrate.ts",
     "hub:backfill": "node --import tsx worker/hub-backfill.ts",
+    "missing:backfill-groups": "node --import tsx scripts/backfill-missing-person-groups.mts",
     "db:generate": "drizzle-kit generate --config infra/db/drizzle.config.ts",
     "test": "vitest run",
     "test:watch": "vitest",

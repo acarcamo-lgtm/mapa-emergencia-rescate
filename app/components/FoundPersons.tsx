@@ -17,6 +17,16 @@ interface MissingPerson {
   resolutionNote?: string | null;
   resolutionPhotoUrl?: string | null;
   resolvedAt?: number | null;
+  groupReportCount?: number;
+  groupStatusConflict?: boolean;
+  groupMembers?: {
+    id: string;
+    name: string;
+    lastSeen: string;
+    status: "active" | "found";
+    createdAt: number;
+    resolvedAt: number | null;
+  }[];
   createdAt: number;
 }
 
@@ -63,7 +73,7 @@ export default function FoundPersons() {
 
     try {
       const res = await fetch(
-        `/api/missing?status=found&page=${page}&pageSize=${PAGE_SIZE}`,
+        `/api/missing?status=found&page=${page}&pageSize=${PAGE_SIZE}&grouped=1`,
         { cache: "no-store" },
       );
       if (!res.ok) return;
@@ -190,6 +200,11 @@ export default function FoundPersons() {
                   <span className="inline-flex items-center gap-1 rounded-full bg-emerald-600 px-2 py-0.5 text-[11px] font-semibold text-white">
                     <span aria-hidden>✓</span> Localizada a salvo
                   </span>
+                  {(person.groupReportCount ?? 1) > 1 && (
+                    <span className="ml-1 inline-flex items-center rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-semibold text-blue-700">
+                      {person.groupReportCount ?? 1} reportes
+                    </span>
+                  )}
                   <p className="mt-1 font-semibold text-slate-900">
                     {person.name}
                     {personMeta && (

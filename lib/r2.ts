@@ -18,8 +18,7 @@
  * callers keep the legacy base64 path.
  */
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
-
-const ALLOWED_MIME = new Set(["image/jpeg", "image/png", "image/webp"]);
+import { parsePhotoDataUrl } from "./photo-hash";
 
 let _s3: S3Client | null = null;
 
@@ -55,19 +54,6 @@ function publicUrl(key: string): string {
 }
 
 /** Parse a `data:image/<mime>;base64,<payload>` URI into validated bytes. */
-function parseDataUri(
-  uri: string,
-): { bytes: Buffer; contentType: string; ext: string } | null {
-  const m = /^data:([^;,]+);base64,([\s\S]*)$/.exec(uri);
-  if (!m) return null;
-  const contentType = m[1];
-  if (!ALLOWED_MIME.has(contentType)) return null;
-  const bytes = Buffer.from(m[2], "base64");
-  if (bytes.length === 0) return null;
-  const ext = contentType === "image/jpeg" ? "jpg" : contentType.split("/")[1];
-  return { bytes, contentType, ext };
-}
-
 /**
  * Upload a base64 image data URL to R2 under `images/<table>/<id>.<ext>` and
  * return its public CDN URL. Throws if R2 is misconfigured, the data URL is
@@ -80,7 +66,7 @@ export async function uploadPhotoDataUrl(
   table: string,
   id: string,
 ): Promise<string> {
-  const parsed = parseDataUri(dataUrl);
+  const parsed = parsePhotoDataUrl(dataUrl);
   if (!parsed) throw new Error("Foto inválida: se esperaba JPG, PNG o WebP en base64.");
   const key = `images/${table}/${id}.${parsed.ext}`;
   await s3().send(

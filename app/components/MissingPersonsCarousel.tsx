@@ -41,6 +41,16 @@ interface MissingPerson {
   resolutionNote?: string | null;
   resolutionPhotoUrl?: string | null;
   resolvedAt?: number | null;
+  groupReportCount?: number;
+  groupStatusConflict?: boolean;
+  groupMembers?: {
+    id: string;
+    name: string;
+    lastSeen: string;
+    status: "active" | "found";
+    createdAt: number;
+    resolvedAt: number | null;
+  }[];
   createdAt: number;
 }
 
@@ -293,6 +303,7 @@ const PersonasPreview = forwardRef<PersonasPreviewHandle>(
         status: filter,
         page: String(page),
         pageSize: String(pageSize),
+        grouped: "1",
       });
       if (debouncedQuery.trim().length >= MIN_SEARCH_LEN) {
         params.set("q", debouncedQuery.trim());
@@ -326,7 +337,7 @@ const PersonasPreview = forwardRef<PersonasPreviewHandle>(
 
   const fetchFoundTotal = useCallback(async () => {
     try {
-      const res = await fetch("/api/missing?status=found&pageSize=1", {
+      const res = await fetch("/api/missing?status=found&pageSize=1&grouped=1", {
         cache: "no-cache",
       });
       if (!res.ok) return;
@@ -424,9 +435,9 @@ const PersonasPreview = forwardRef<PersonasPreviewHandle>(
           <h2 className="qi-h2">Personas</h2>
           <span
             className="e-pill bg-red-50 text-red-700"
-            aria-label={`${total} personas reportadas`}
+            aria-label={`${total} grupos de personas reportadas`}
           >
-            {total.toLocaleString("es-VE")} reportadas
+            {total.toLocaleString("es-VE")} grupos
           </span>
         </div>
 
@@ -688,6 +699,19 @@ function MissingPersonCard({
           <p className="e-person-card__row e-person-card__row--phone">
             <span aria-hidden>📞</span>
             <span>{person.contact}</span>
+          </p>
+        )}
+
+        {(person.groupReportCount ?? 1) > 1 && (
+          <p className="e-person-card__row text-blue-700">
+            <span aria-hidden>≋</span>
+            <span>{person.groupReportCount ?? 1} reportes agrupados</span>
+          </p>
+        )}
+
+        {person.groupStatusConflict && (
+          <p className="e-person-card__note text-amber-800">
+            Verifica: hay fuentes con estados distintos.
           </p>
         )}
 

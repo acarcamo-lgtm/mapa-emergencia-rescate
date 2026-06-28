@@ -37,6 +37,10 @@ Las fotos pequeñas subidas desde `/federacion` se envían como `dataUrl` para
 revisión restringida. En los espejos automáticos de reportes/personas se indica
 `hasPhoto` y se añaden pistas normalizadas (`audienceScope`, `targetCountry`,
 `normalizedKind`, `area`, `relationships`) sin convertir el dato en canónico.
+Los reportes de personas creados por formularios públicos también pasan por una
+compuerta local de hash exacto de imagen: si la foto ya fue recibida byte por
+byte, el sitio responde `409 duplicate_photo`, no guarda otro registro y no
+envía espejo a Respuesta VE.
 
 Cada envío también lleva:
 
@@ -122,8 +126,15 @@ reglas actuales:
   de Venezuela`; los conectores se marcan `both`.
 - **Relaciones:** pacientes apuntan a hospitales, hospitales a zonas, personas a
   última ubicación conocida y reportes a categorías de necesidad.
+- **Personas:** `/api/missing?grouped=1` devuelve una ficha representante por
+  grupo probable, con conteo de reportes y advertencia si hay estados
+  contradictorios. Solo se materializan grupos públicos con nombre+edad o
+  nombre+ubicación; una coincidencia por solo nombre queda como señal débil y
+  no fusiona homónimos. Las vistas filtradas solo exponen filas del mismo
+  estado; `status=all` permite revisar ambos lados del grupo. El endpoint sin
+  `grouped=1` conserva el listado plano.
 - **Seguridad:** la vista no expone contactos de pacientes/personas ni payloads
-  crudos de uploads.
+  crudos de uploads. Tampoco expone hashes de foto o documento.
 - **Promoción:** Respuesta VE sigue siendo quien procesa, deduplica y promueve
   registros canónicos.
 - **Pacientes hospitalarios:** se envían para revisión restringida y relación

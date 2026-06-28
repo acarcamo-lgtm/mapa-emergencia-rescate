@@ -1,5 +1,9 @@
 import { listHospitals, searchPatients, type Hospital, type PatientSearchResult } from "@/lib/hospitals";
-import { countMissingStats, listMissingPage, type MissingPerson } from "@/lib/missing";
+import {
+  countMissingStats,
+  listMissingGroupsPage,
+  type MissingPerson,
+} from "@/lib/missing";
 import { listReports } from "@/lib/store";
 import { REPORT_TYPES, type EmergencyReport, type ReportType } from "@/lib/types";
 
@@ -356,8 +360,8 @@ function byCategory(nodes: CoordinationNode[]): CoordinationGroup[] {
 export async function getCoordinationOverview(): Promise<CoordinationOverview> {
   const [reports, activeMissing, foundMissing, missingStats, hospitals, patientResults] = await Promise.all([
     listReports(),
-    listMissingPage({ status: "active", pageSize: 100 }),
-    listMissingPage({ status: "found", pageSize: 100 }),
+    listMissingGroupsPage({ status: "active", pageSize: 100 }),
+    listMissingGroupsPage({ status: "found", pageSize: 100 }),
     countMissingStats(),
     listHospitals({ limit: 500 }),
     searchPatients("", 200),
