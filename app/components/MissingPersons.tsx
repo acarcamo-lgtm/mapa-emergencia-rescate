@@ -14,8 +14,12 @@ import {
   trackPersonSearchStarted,
 } from "./analytics";
 import { timeAgo } from "@/lib/format";
-import { apiSend } from "@/lib/api-client";
-import { useApiList } from "@/lib/hooks-client";
+import {
+  useMissingList,
+  useCreateMissing,
+  useDeleteMissing,
+  useMarkFound,
+} from "@/hooks/missing";
 
 // ============================================================================
 // PATRÓN CANÓNICO de componente de lista (seguir en los demás):
@@ -64,15 +68,6 @@ function pageWindow(page: number, totalPages: number): number[] {
   return pages;
 }
 
-function buildUrl(page: number, search: string): string {
-  const params = new URLSearchParams({
-    page: String(page),
-    pageSize: String(PAGE_SIZE),
-  });
-  if (search.length >= MIN_SEARCH_LEN) params.set("q", search);
-  return `/api/missing?${params.toString()}`;
-}
-
 export default function MissingPersons() {
   const [page, setPage] = useState(1);
   const [query, setQuery] = useState("");
@@ -93,7 +88,10 @@ export default function MissingPersons() {
   );
 
   const search = debouncedQuery.trim();
-  const url = buildUrl(page, search);
+
+  const createMissing = useCreateMissing();
+  const deleteMissing = useDeleteMissing();
+  const markFound = useMarkFound();
 
   const {
     items: people,
@@ -106,7 +104,15 @@ export default function MissingPersons() {
     refetch,
     patchLocal,
     setTotalLocal,
-  } = useApiListMissing(url, network.pollIntervalMs);
+  } = useApiListMissing(
+    {
+      status: "active",
+      page,
+      pageSize: PAGE_SIZE,
+      q: search.length >= MIN_SEARCH_LEN ? search : undefined,
+    },
+    network.pollIntervalMs,
+  );
 
   // Token admin: lo leemos al montar y cuando vuelve el foco (login en otra parte).
   useEffect(() => {
@@ -187,15 +193,15 @@ export default function MissingPersons() {
 
   const handleSubmit = useCallback(
     async (payload: MissingPersonPayload) => {
-      await apiSend("POST", "/api/missing", payload);
+      await createMissing.mutateAsync(payload);
       setShowForm(false);
       // El nuevo reporte es el más reciente: volvemos al inicio para verlo.
       setQuery("");
       setDebouncedQuery("");
       setPage(1);
-      refetch(true);
+      refetch();
     },
-    [refetch],
+    [createMissing, refetch],
   );
 
   const handleDelete = useCallback(
@@ -206,25 +212,25 @@ export default function MissingPersons() {
       setTotalLocal((t) => Math.max(0, t - 1));
       setSelected((cur) => (cur?.id === id ? null : cur));
       try {
-        await apiSend("DELETE", `/api/missing/${id}`);
+        await deleteMissing.mutateAsync(id);
       } catch {
-        /* el refetch corrige si falló */
+        /* el refetch (invalidate) corrige si falló */
       }
       refetch();
     },
-    [adminToken, patchLocal, setTotalLocal, refetch],
+    [adminToken, deleteMissing, patchLocal, setTotalLocal, refetch],
   );
 
   const handleMarkFound = useCallback(
     async (id: string, payload: { note: string; photo: string | null }) => {
-      await apiSend("POST", `/api/missing/${id}/found`, payload);
+      await markFound.mutateAsync({ id, note: payload.note, photo: payload.photo });
       // Sale de la lista pública (activas).
       patchLocal((prev) => prev.filter((p) => p.id !== id));
       setTotalLocal((t) => Math.max(0, t - 1));
       setSelected(null);
       refetch();
     },
-    [patchLocal, setTotalLocal, refetch],
+    [markFound, patchLocal, setTotalLocal, refetch],
   );
 
   const pages = useMemo(() => pageWindow(page, totalPages), [page, totalPages]);
@@ -259,7 +265,7 @@ export default function MissingPersons() {
               </span>
               <button
                 type="button"
-                onClick={() => refetch(true)}
+                onClick={() => refetch()}
                 disabled={fetching}
                 className="rounded-md border border-slate-200 px-2 py-0.5 font-medium text-slate-600 transition hover:bg-slate-50 disabled:opacity-60"
               >
@@ -525,25 +531,54 @@ export default function MissingPersons() {
   );
 }
 
-/** Envuelve useApiList fijando el selector y exponiendo un setter de total local
- *  para las mutaciones optimistas (delete / mark-found bajan el contador ya). */
-function useApiListMissing(url: string, pollMs: number) {
-  const list = useApiList<MissingPerson>(url, {
-    selectItems: (r) => (r.people as MissingPerson[]) ?? [],
-    pollMs,
-  });
-  // useApiList recalcula `total` desde el server en cada respuesta; para la baja
-  // optimista mantenemos un override local que el próximo refetch reemplaza.
+/** Adaptador sobre useMissingList (TanStack) que expone la forma que el
+ *  componente consume + overrides locales optimistas (delete/mark-found bajan el
+ *  contador y quitan la tarjeta ya; el próximo refetch del query los reemplaza). */
+function useApiListMissing(
+  params: { status: "active" | "found" | "all"; page: number; pageSize: number; q?: string },
+  pollMs: number,
+) {
+  const query = useMissingList(params, pollMs);
+  const server = query.data;
+
+  // Overrides locales para optimismo; se sueltan cuando llegan datos frescos.
+  const [removed, setRemoved] = useState<Set<string>>(() => new Set());
   const [totalOverride, setTotalOverride] = useState<number | null>(null);
-  const lastServerTotal = useRef(list.total);
+  const lastData = useRef(server);
   useEffect(() => {
-    if (list.total !== lastServerTotal.current) {
-      lastServerTotal.current = list.total;
-      setTotalOverride(null); // llegó dato fresco del server → suelta el override
+    if (server && server !== lastData.current) {
+      lastData.current = server;
+      setRemoved(new Set());
+      setTotalOverride(null);
     }
-  }, [list.total]);
-  const setTotalLocal = useCallback((fn: (t: number) => number) => {
-    setTotalOverride((cur) => fn(cur ?? lastServerTotal.current));
+  }, [server]);
+
+  const items = (server?.people ?? []).filter((p) => !removed.has(p.id));
+  const patchLocal = useCallback((fn: (prev: MissingPerson[]) => MissingPerson[]) => {
+    // El componente solo usa patchLocal para FILTRAR (quitar por id); lo mapeamos
+    // al set `removed` derivando qué ids desaparecieron.
+    const current = (lastData.current?.people ?? []) as MissingPerson[];
+    const kept = new Set(fn(current).map((p) => p.id));
+    setRemoved((prev) => {
+      const next = new Set(prev);
+      for (const p of current) if (!kept.has(p.id)) next.add(p.id);
+      return next;
+    });
   }, []);
-  return { ...list, total: totalOverride ?? list.total, setTotalLocal };
+  const setTotalLocal = useCallback((fn: (t: number) => number) => {
+    setTotalOverride((cur) => fn(cur ?? server?.total ?? 0));
+  }, [server?.total]);
+
+  return {
+    items: items as MissingPerson[],
+    total: totalOverride ?? server?.total ?? 0,
+    totalPages: server?.totalPages ?? 1,
+    totalCapped: server?.totalCapped ?? false,
+    persistent: server?.persistent ?? true,
+    serverPage: server?.page ?? null,
+    fetching: query.isFetching,
+    refetch: () => query.refetch(),
+    patchLocal,
+    setTotalLocal,
+  };
 }
