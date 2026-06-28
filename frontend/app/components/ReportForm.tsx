@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { REPORT_TYPES, REPORT_TYPE_KEYS, type ReportType } from "@/lib/types";
 import { trackEvent } from "./openpanel";
+import { useTurnstile } from "./useTurnstile";
 
 interface ReportFormProps {
   /** Ubicación elegida, o null mientras el usuario aún no la define. */
@@ -22,6 +23,7 @@ interface ReportFormProps {
     affected: number;
     needs: string;
     photo: string | null;
+    turnstileToken?: string;
   }) => Promise<void>;
 }
 
@@ -118,6 +120,7 @@ export default function ReportForm({
   onSubmit,
 }: ReportFormProps) {
   const dialogRef = useRef<HTMLDivElement>(null);
+  const turnstile = useTurnstile();
   // Al abrir (o al volver de "elegir en el mapa") movemos el foco al modal para
   // que Esc lo cierre de inmediato, y por accesibilidad.
   useEffect(() => {
@@ -202,12 +205,15 @@ export default function ReportForm({
     }
     setSubmitting(true);
     try {
+      // Token FRESCO de Turnstile para este envío (se resetea tras leerlo).
+      const turnstileToken = await turnstile.getToken();
       await onSubmit({
         type,
         place: place.trim(),
         affected: copy.showAffected ? Number(affected) || 0 : 0,
         needs: needs.trim(),
         photo,
+        turnstileToken,
       });
       trackEvent("report_created", {
         reportType: type,
@@ -475,6 +481,8 @@ export default function ReportForm({
               {error}
             </p>
           )}
+
+          <div ref={turnstile.ref} className="flex justify-center empty:hidden" />
 
           <div className="flex gap-2">
             <button

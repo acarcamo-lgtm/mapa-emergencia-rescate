@@ -6,8 +6,9 @@
 # (`npm run migrate` -> worker/migrate.ts). Idempotente: registra lo aplicado en
 # __drizzle_migrations y salta lo ya aplicado, así que es seguro re-correrlo.
 #
-# Usa la imagen `worker` (lleva el node_modules completo + tsx + pg + los .sql);
-# la imagen `app` es standalone y no incluiría drizzle ni las migraciones.
+# Usa la imagen BACKEND (lleva node_modules + tsx + pg + drizzle + los .sql, y el
+# script `npm run migrate`). Es el MISMO artefacto que la API y el worker, así que
+# el esquema que migra coincide exactamente con el código que va a rodar.
 #
 # El workflow (deploy-hetzner.yml) lo corre y BLOQUEA el roll de la app hasta que
 # complete (kubectl wait --for=condition=complete). CI le pone el nombre
@@ -34,12 +35,17 @@ spec:
       restartPolicy: Never
       containers:
         - name: migrate
-          # CI reemplaza el tag por la imagen worker :<sha> del deploy.
-          image: ghcr.io/OWNER/REPO-worker:latest
+          # CI reemplaza el tag por la imagen -backend:<sha> del deploy.
+          image: ghcr.io/OWNER/REPO-backend:latest
           command: ["npm", "run", "migrate"]
+          # WORKDIR del backend = /app/backend, pero los .sql viven en
+          # /app/infra/db/migrations -> apuntamos MIGRATIONS_DIR un nivel arriba.
+          env:
+            - name: MIGRATIONS_DIR
+              value: "../infra/db/migrations"
           envFrom:
             - secretRef:
-                name: app-env # DATABASE_URL (+ DB_DRIVER)
+                name: app-env # DATABASE_URL
           resources:
             requests:
               cpu: "100m"

@@ -18,6 +18,7 @@ export interface ContactInput {
   email: string;
   subject: string;
   message: string;
+  turnstileToken?: string; // prueba de humanidad (Turnstile) para el backend
 }
 
 export interface ContactResponse {

@@ -78,13 +78,16 @@ type SubmitOutcome =
  * muestra, se encola para reintento, o se descarta. */
 async function postReportToServer(
 	payload: QueuedPayload,
+	turnstileToken?: string,
 ): Promise<SubmitOutcome> {
 	let res: Response;
 	try {
 		res = await fetch("/api/reports", {
 			method: "POST",
 			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify(payload),
+			// El token de Turnstile es de un solo uso: viaja en el POST pero NO se
+			// persiste en `payload` (la cola offline reintentaría con uno caducado).
+			body: JSON.stringify({ ...payload, turnstileToken }),
 		});
 	} catch {
 		// Red caída: no llegó al servidor.
@@ -487,6 +490,7 @@ export default function EmergencyApp() {
 			affected: number;
 			needs: string;
 			photo: string | null;
+			turnstileToken?: string;
 		}) => {
 			if (!draft) return;
 
@@ -511,12 +515,14 @@ export default function EmergencyApp() {
 				}
 			}
 
+			// El token de Turnstile no se persiste en la cola offline (un solo uso).
+			const { turnstileToken, ...reportFields } = payload;
 			const full: QueuedPayload = {
-				...payload,
+				...reportFields,
 				lat: draft.lat,
 				lng: draft.lng,
 			};
-			const outcome = await postReportToServer(full);
+			const outcome = await postReportToServer(full, turnstileToken);
 
 			if (outcome.status === "drop") {
 				// Datos rechazados por el servidor: el formulario muestra el error.

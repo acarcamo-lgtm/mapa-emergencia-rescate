@@ -6,8 +6,8 @@
  * Ver docs/rfcs/0001-sincronizacion-fuentes.md
  */
 
-import { hasDbEnv } from "../drizzle";
-import { upsertExternalMissingBatch } from "../missing";
+import { hasDbEnv } from "../../src/db";
+import { upsertExternalMissingBatch } from "../../src/services/missing";
 import type { SourceAdapter, SyncResult, ExternalPerson } from "./types";
 import { enabledSources, getSource } from "./sources";
 import { getSyncCursor, setSyncCursor, recordSyncRun, type SyncTrigger } from "./state";

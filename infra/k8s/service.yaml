@@ -2,8 +2,8 @@
 #
 # Cada Service de tipo LoadBalancer hace que el cloud-controller-manager de
 # Hetzner aprovisione un LB real apuntando a los pods por la red privada:
-#   - web -> selector tier=web -> LB "mapa-lb"     -> terremoto… (dominio público)
-#   - api -> selector tier=api -> LB "mapa-api-lb"  -> api.terremoto… (terceros)
+#   - web -> selector tier=web -> LB "mapa-lb"     -> terremoto… (FRONTEND :3000)
+#   - api -> selector tier=api -> LB "mapa-api-lb"  -> api.terremoto… (BACKEND :8080)
 #
 # Dos LB = aislamiento total: una tormenta de tráfico de API pega solo al LB+pods
 # de api (su propio HPA, su propio blast radius), nunca al render del front.
@@ -38,8 +38,10 @@ metadata:
     # (Hetzner CCM docs — workaround estándar para la rotación de IP del LB.)
     load-balancer.hetzner.cloud/hostname: "lb.terremotovenezuela.app"
     # NO fijar health-check-port (ver nota histórica: el CCM usa el NodePort).
+    # El front es pura UI (no tiene /api/readyz): el health check del LB pega a "/"
+    # (la home siempre responde 200 si el server.js de Next está arriba).
     load-balancer.hetzner.cloud/health-check-protocol: "http"
-    load-balancer.hetzner.cloud/health-check-http-path: "/api/readyz"
+    load-balancer.hetzner.cloud/health-check-http-path: "/"
     load-balancer.hetzner.cloud/health-check-interval: "15s"
     load-balancer.hetzner.cloud/health-check-retries: "2"
     load-balancer.hetzner.cloud/uses-proxyprotocol: "false"
@@ -83,11 +85,12 @@ spec:
     app: mapa
     tier: api
   ports:
+    # El backend (Express) escucha en :8080, no :3000 como el front.
     - name: https
       protocol: TCP
       port: 443
-      targetPort: 3000
+      targetPort: 8080
     - name: http
       protocol: TCP
       port: 80
-      targetPort: 3000
+      targetPort: 8080

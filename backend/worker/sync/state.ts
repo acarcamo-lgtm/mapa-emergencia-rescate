@@ -4,7 +4,7 @@
  */
 
 import { eq, desc, sql } from "drizzle-orm";
-import { getDb, hasDbEnv, schema } from "../drizzle";
+import { getDb, hasDbEnv, schema } from "../../src/db";
 import type { SyncResult } from "./types";
 
 const { syncState, syncRuns } = schema;

@@ -3,7 +3,7 @@
  * Mantienen los mismos límites que `lib/missing.ts` / `scripts/import-missing.mjs`.
  */
 
-import { MAX_NAME, MAX_DESCRIPTION, MAX_LAST_SEEN, MAX_CONTACT } from "../missing";
+import { MAX_NAME, MAX_DESCRIPTION, MAX_LAST_SEEN, MAX_CONTACT } from "../../src/services/missing";
 
 export { MAX_NAME, MAX_DESCRIPTION, MAX_LAST_SEEN, MAX_CONTACT };
 

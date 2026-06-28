@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { CONTACT_EMAIL } from "@/lib/site";
 import { useContactSubmit } from "@/hooks/contact";
+import { useTurnstile } from "./useTurnstile";
 
 export default function ContactForm() {
   const [name, setName] = useState("");
@@ -14,14 +15,17 @@ export default function ContactForm() {
 
   const contactMutation = useContactSubmit();
   const submitting = contactMutation.isPending;
+  const turnstile = useTurnstile();
 
-  function handleSubmit(event: React.FormEvent) {
+  async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
     setError(null);
     setSuccess(null);
 
+    // Token FRESCO de Turnstile para este envío (se resetea tras leerlo).
+    const turnstileToken = await turnstile.getToken();
     contactMutation.mutate(
-      { name, email, subject, message },
+      { name, email, subject, message, turnstileToken },
       {
         onSuccess: (data) => {
           setSuccess(data.message ?? "Mensaje enviado.");
@@ -133,6 +137,8 @@ export default function ContactForm() {
           {success}
         </p>
       )}
+
+      <div ref={turnstile.ref} className="flex justify-center empty:hidden" />
 
       <button
         type="submit"

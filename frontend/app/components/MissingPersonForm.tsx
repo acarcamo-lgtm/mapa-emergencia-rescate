@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { trackEvent } from "./openpanel";
+import { useTurnstile } from "./useTurnstile";
 
 export type MissingReportType = "missing" | "found";
 export type FoundPlace = "hospital" | "street";
@@ -17,6 +18,7 @@ export interface MissingPersonPayload {
   contact: string;
   photo: string | null;
   reportType: MissingReportType;
+  turnstileToken?: string; // prueba de humanidad (Cloudflare Turnstile)
 }
 
 interface Props {
@@ -193,6 +195,7 @@ export default function MissingPersonForm({
   initialFoundPlace = null,
 }: Props) {
   const [mounted, setMounted] = useState(false);
+  const turnstile = useTurnstile();
   const [reportType, setReportType] =
     useState<MissingReportType>(initialReportType);
   const [foundPlace, setFoundPlace] = useState<FoundPlace | null>(
@@ -287,6 +290,8 @@ export default function MissingPersonForm({
       }
       setSubmitting(true);
       try {
+        // Token FRESCO de Turnstile para este envío (se resetea tras leerlo).
+        const turnstileToken = await turnstile.getToken();
         await onSubmit({
           name: name.trim(),
           age: age.trim(),
@@ -305,6 +310,7 @@ export default function MissingPersonForm({
           contact: contact.trim(),
           photo,
           reportType,
+          turnstileToken,
         });
         trackEvent("missing_person_created", {
           reportType,
@@ -338,6 +344,7 @@ export default function MissingPersonForm({
       foundPlace,
       personStatus,
       onSubmit,
+      turnstile,
     ],
   );
 
@@ -717,6 +724,9 @@ export default function MissingPersonForm({
           </div>
 
           {error && <p className="text-sm text-red-600">{error}</p>}
+
+          {/* Turnstile (managed/invisible). Solo aparece si CF pide interacción. */}
+          <div ref={turnstile.ref} className="flex justify-center empty:hidden" />
 
           <footer className="e-report-modal__footer flex justify-end gap-2.5 pt-1">
             <button

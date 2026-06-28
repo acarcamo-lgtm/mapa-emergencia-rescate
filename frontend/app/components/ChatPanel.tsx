@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from "react";
 import { useLowBandwidthMode } from "./useLowBandwidthMode";
 import { trackEvent } from "./openpanel";
+import { useTurnstile } from "./useTurnstile";
 import {
   useChatMessages,
   useDeleteChatMessage,
@@ -99,6 +100,7 @@ export default function ChatPanel() {
   const sendMutation = useSendChatMessage();
   const deleteMutation = useDeleteChatMessage();
   const sending = sendMutation.isPending;
+  const turnstile = useTurnstile();
 
   const listRef = useRef<HTMLDivElement>(null);
   const atBottomRef = useRef(true);
@@ -140,11 +142,14 @@ export default function ChatPanel() {
       if (!trimmed) return;
       localStorage.setItem(NAME_STORAGE_KEY, name.trim());
       try {
+        // Token FRESCO de Turnstile para este envío (se resetea tras leerlo).
+        const turnstileToken = await turnstile.getToken();
         await sendMutation.mutateAsync({
           name: name.trim(),
           text: trimmed,
           role,
           replyTo: replyingTo?.id ?? null,
+          turnstileToken,
         });
         trackEvent("chat_message_sent", {
           role,
@@ -159,7 +164,7 @@ export default function ChatPanel() {
         setError(err instanceof Error ? err.message : "Error al enviar.");
       }
     },
-    [text, name, role, replyingTo, sendMutation],
+    [text, name, role, replyingTo, sendMutation, turnstile],
   );
 
   const handleDelete = useCallback(
@@ -425,6 +430,7 @@ export default function ChatPanel() {
               {sending ? "…" : "Enviar"}
             </button>
           </div>
+          <div ref={turnstile.ref} className="flex justify-center empty:hidden" />
           {error && <p className="text-sm text-red-600">{error}</p>}
         </form>
       </div>

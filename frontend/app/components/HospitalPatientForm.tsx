@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { trackEvent } from "./openpanel";
+import { useTurnstile } from "./useTurnstile";
 import {
   PATIENT_CONDITION_META,
   PATIENT_STATUS_META,
@@ -16,6 +17,7 @@ export interface PatientPayload {
   status: PatientStatus;
   notes: string;
   contact: string;
+  turnstileToken?: string; // prueba de humanidad (Turnstile) para el backend
 }
 
 interface Props {
@@ -38,6 +40,7 @@ export default function HospitalPatientForm({
   const [consent, setConsent] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const turnstile = useTurnstile();
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
@@ -51,6 +54,8 @@ export default function HospitalPatientForm({
     }
     setSubmitting(true);
     try {
+      // Token FRESCO de Turnstile para este envío (se resetea tras leerlo).
+      const turnstileToken = await turnstile.getToken();
       await onSubmit({
         name: name.trim(),
         age: age.trim(),
@@ -58,6 +63,7 @@ export default function HospitalPatientForm({
         status,
         notes: notes.trim(),
         contact: contact.trim(),
+        turnstileToken,
       });
       trackEvent("hospital_patient_created", {
         condition,
@@ -195,6 +201,8 @@ export default function HospitalPatientForm({
             </p>
           )}
         </div>
+
+        <div ref={turnstile.ref} className="flex justify-center empty:hidden px-5" />
 
         <footer className="flex justify-end gap-2 border-t border-slate-200 bg-slate-50 px-5 py-3">
           <button

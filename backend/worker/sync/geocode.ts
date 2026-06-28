@@ -10,7 +10,7 @@
  */
 
 import { eq, sql } from "drizzle-orm";
-import { getDb, hasDbEnv, schema } from "../drizzle";
+import { getDb, hasDbEnv, schema } from "../../src/db";
 
 const { geocodeCache } = schema;
 

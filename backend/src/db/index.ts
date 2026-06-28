@@ -21,4 +21,13 @@ export function getDb(): ReturnType<typeof drizzle<typeof schema>> {
   return _db;
 }
 
+/**
+ * Guard heredado del app Next (lib/db.ts): true cuando hay DATABASE_URL. En el
+ * backend SIEMPRE la hay (validada en config/env, fail-fast), pero el código de
+ * sync conserva sus ramas `if (!hasDbEnv())` para preservar la semántica exacta.
+ */
+export function hasDbEnv(): boolean {
+  return Boolean(process.env.DATABASE_URL);
+}
+
 export { schema };

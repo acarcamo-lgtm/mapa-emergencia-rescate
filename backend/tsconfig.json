@@ -13,7 +13,14 @@
     "outDir": "dist",
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      // El esquema compartido vive en ../infra/db (FUERA del root del backend).
+      // Con moduleResolution:bundler, tsc NO sube a backend/node_modules para
+      // resolver los imports de drizzle-orm DESDE infra/db/schema.ts. Estos paths
+      // los anclan a backend/node_modules sin importar el archivo que importe.
+      // (tsx ya resuelve esto en runtime; esto es solo para que tsc/CI pase.)
+      "drizzle-orm": ["./node_modules/drizzle-orm"],
+      "drizzle-orm/*": ["./node_modules/drizzle-orm/*"]
     },
     "types": ["node"]
   },

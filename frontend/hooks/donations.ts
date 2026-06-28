@@ -34,6 +34,7 @@ export function useDonationMonthly() {
 export interface CreateDonationInput {
   name: string;
   amountCents: number;
+  turnstileToken?: string; // prueba de humanidad (Turnstile) para el backend
 }
 
 export interface CreateDonationResult {

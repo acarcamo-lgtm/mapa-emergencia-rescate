@@ -1,9 +1,12 @@
-# Migration worker Deployment — runs the BullMQ workers (table copy + photo
-# rehost). Separate from the app: its own pods, scaled by replicas, NOT behind
-# the LB (no Service). Uses the `worker` image target.
+# Worker Deployment — runs the BullMQ workers: external-source sync (crawl,
+# geocode, dedup), HUB ingest (scheduled, ongoing) + the one-time Neon→Hetzner
+# backfill (table copy + photo rehost to R2). Its own pods, scaled by replicas,
+# NOT behind the LB (no Service). Reuses the BACKEND image (same artifact as the
+# API; web/worker/migrate differ only by `command` — standard practice).
 #
-# Env: app-env (DATABASE_URL, VALKEY_URL) + migrate-env (NEON_DATABASE_URL, R2_*).
-# CI overwrites the image tag, same as the app. Graceful SIGTERM drains jobs
+# Env: app-env (DATABASE_URL, VALKEY_URL) + migrate-env (NEON_DATABASE_URL, R2_*
+# — solo lo necesita el backfill one-time; el sync/HUB usan app-env). CI overwrites
+# the image tag, same as the API. Graceful SIGTERM drains jobs
 # (terminationGracePeriodSeconds) so a rolling restart never drops in-flight work.
 apiVersion: apps/v1
 kind: Deployment
@@ -41,14 +44,26 @@ spec:
       terminationGracePeriodSeconds: 240
       containers:
         - name: worker
-          image: ghcr.io/OWNER/REPO-worker:latest
-          command: ["node", "--import", "tsx", "worker/index.ts"]
+          # CI parchea el tag a la imagen -backend:<sha> (mismo artefacto que la
+          # API). WORKDIR del backend = /app/backend, así que worker/index.ts es
+          # relativo. tsx resuelve el alias @/ del tsconfig del backend.
+          image: ghcr.io/OWNER/REPO-backend:latest
+          command: ["npx", "tsx", "worker/index.ts"]
           envFrom:
             - secretRef:
-                name: app-env # DATABASE_URL, VALKEY_URL, DB_DRIVER
+                name: app-env # DATABASE_URL, VALKEY_URL
             - secretRef:
-                name: migrate-env # NEON_DATABASE_URL, R2_*
+                name: migrate-env # NEON_DATABASE_URL, R2_* (solo backfill one-time)
           env:
+            # Scraping/sync de fuentes externas DESACTIVADO en prod (intención
+            # actual). Apaga el crawl de desaparecidosterremotovenezuela.com /
+            # venezuelatebusca.com + el geocode de mantenimiento, y la federación
+            # HUB. El worker sigue vivo para los jobs encolados a mano (backfill
+            # one-time, fotos→R2). Reactivar = quitar estas dos o ponerlas a "1".
+            - name: SYNC_SCHEDULERS
+              value: "0"
+            - name: HUB_SCHEDULERS
+              value: "0"
             - name: PHOTOS_CONCURRENCY
               value: "8"
             - name: TABLES_CONCURRENCY

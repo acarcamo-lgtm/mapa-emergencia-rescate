@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { trackEvent } from "./openpanel";
+import { useTurnstile } from "./useTurnstile";
 import {
   FACILITY_TYPE_META,
   PRIORITY_ZONE_META,
@@ -18,6 +19,7 @@ export interface HospitalPayload {
   address: string;
   level: HospitalLevel;
   priorityZone: HospitalPriorityZone;
+  turnstileToken?: string; // prueba de humanidad (Turnstile) para el backend
 }
 
 interface Props {
@@ -44,6 +46,7 @@ export default function HospitalForm({ onCancel, onSubmit, initialState }: Props
   const [priorityZone, setPriorityZone] = useState<HospitalPriorityZone>("P3");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const turnstile = useTurnstile();
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
@@ -52,6 +55,8 @@ export default function HospitalForm({ onCancel, onSubmit, initialState }: Props
     if (!state.trim()) return setError("Indica el estado.");
     setSubmitting(true);
     try {
+      // Token FRESCO de Turnstile para este envío (se resetea tras leerlo).
+      const turnstileToken = await turnstile.getToken();
       await onSubmit({
         name: name.trim(),
         facilityType,
@@ -60,6 +65,7 @@ export default function HospitalForm({ onCancel, onSubmit, initialState }: Props
         address: address.trim(),
         level,
         priorityZone,
+        turnstileToken,
       });
       trackEvent("hospital_created", {
         facilityType,
@@ -211,6 +217,8 @@ export default function HospitalForm({ onCancel, onSubmit, initialState }: Props
             </p>
           )}
         </div>
+
+        <div ref={turnstile.ref} className="flex justify-center empty:hidden px-5" />
 
         <footer className="flex justify-end gap-2 border-t border-slate-200 bg-slate-50 px-5 py-3">
           <button

@@ -64,22 +64,35 @@ jobs:
         with:
           node-version: 20
           cache: npm
-      # `npm ci` is strict and aborts when package-lock.json is out of sync with
-      # this node:20 npm (the @esbuild/* optional-dep drift when the lock was
-      # written by a different npm major). main is protected, so the pipeline
-      # cannot push a corrected lock back — instead it just falls back to
-      # `npm install`, which resolves against package.json without the strict
-      # check. The committed lock is still authoritative when in-sync.
-      - name: Install deps
+          # Tras el split monorepo hay DOS lockfiles (frontend/ + backend/); el
+          # cache de npm los toma a ambos como clave.
+          cache-dependency-path: |
+            frontend/package-lock.json
+            backend/package-lock.json
+      # `npm ci` es estricto y aborta si el lock está desincronizado con este npm
+      # (drift de @esbuild/* optional-deps). main está protegido y el pipeline no
+      # puede empujar un lock corregido, así que caemos a `npm install`. El lock
+      # commiteado sigue siendo autoritativo cuando está en sync.
+      # --- BACKEND (Express API + worker) -------------------------------------
+      - name: Install deps (backend)
+        working-directory: backend
         run: npm ci --no-audit --no-fund || npm install --no-audit --no-fund
-      - name: Typecheck (app)
-        run: npx tsc --noEmit -p tsconfig.json
-      - name: Typecheck (worker)
+      - name: Typecheck backend (app)
+        working-directory: backend
+        run: npm run typecheck
+      - name: Typecheck backend (worker)
+        working-directory: backend
         run: npx tsc --noEmit -p worker/tsconfig.json
-      - name: Lint
+      # --- FRONTEND (Next, pura UI) -------------------------------------------
+      - name: Install deps (frontend)
+        working-directory: frontend
+        run: npm ci --no-audit --no-fund || npm install --no-audit --no-fund
+      - name: Typecheck frontend
+        working-directory: frontend
+        run: npm run typecheck
+      - name: Lint frontend
+        working-directory: frontend
         run: npm run lint
-      - name: Generate OpenAPI spec (must succeed)
-        run: npm run openapi
 
   deploy:
     name: deploy
@@ -125,7 +138,8 @@ jobs:
           echo "ref    = ${{ github.ref }}"
 
       # ---------------------------------------------------------------
-      # 1. Build the immutable app + worker images, push to GHCR (:<sha> + :latest)
+      # 1. Build the immutable frontend + backend images, push to GHCR
+      #    (:<sha> + :latest). El backend image sirve API + worker + migrate.
       # ---------------------------------------------------------------
       # Push a GHCR con un PAT clásico (write:packages) en vez del GITHUB_TOKEN
       # del run: tras mover el repo a la org `terremotovenezuela`, el GITHUB_TOKEN
@@ -142,12 +156,15 @@ jobs:
       - name: Set up Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Build and push (app)
+      # --- frontend (Next standalone, pure UI) ---------------------------------
+      # context = frontend/. El browser llama al backend por URL ABSOLUTA, así que
+      # NEXT_PUBLIC_API_URL se inlinea en BUILD y apunta al dominio del backend de
+      # prod (api.terremotovenezuela.app). El backend habilita CORS para el front.
+      - name: Build and push (frontend)
         uses: docker/build-push-action@v6
         with:
-          context: .
-          target: runtime # explicit: `worker` is the LAST stage; without this
-          # docker would build the worker image and push it as the app tag.
+          context: ./frontend
+          target: runtime
           push: true
           # build-push-action@v6 adjunta attestations (provenance/SBOM) por
           # defecto, que se PUSHEAN como manifests extra. Con GITHUB_TOKEN en una
@@ -156,10 +173,13 @@ jobs:
           provenance: false
           sbom: false
           tags: |
-            ${{ env.IMAGE }}:${{ env.SHA }}
-            ${{ env.IMAGE }}:latest
+            ${{ env.IMAGE }}-frontend:${{ env.SHA }}
+            ${{ env.IMAGE }}-frontend:latest
           build-args: |
             APP_BUILD_SHA=${{ env.SHA }}
+            NEXT_PUBLIC_API_URL=${{ vars.NEXT_PUBLIC_API_URL || 'https://api.terremotovenezuela.app' }}
+            NEXT_PUBLIC_R2_PUBLIC_BASE=${{ vars.NEXT_PUBLIC_R2_PUBLIC_BASE }}
+            NEXT_PUBLIC_TURNSTILE_SITE_KEY=${{ secrets.TURNSTILE_SITE_KEY }}
             NEXT_PUBLIC_ASSET_PREFIX=${{ secrets.NEXT_PUBLIC_ASSET_PREFIX }}
             NEXT_PUBLIC_OPENPANEL_CLIENT_ID=${{ secrets.NEXT_PUBLIC_OPENPANEL_CLIENT_ID }}
             NEXT_PUBLIC_OPENPANEL_PRODUCTION_HOST=${{ vars.NEXT_PUBLIC_OPENPANEL_PRODUCTION_HOST || 'terremotovenezuela.app' }}
@@ -167,17 +187,21 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Build and push (worker)
+      # --- backend (Express API). MISMA imagen sirve API + worker + migrate
+      # (práctica estándar: un artefacto, web/worker/migrate se distinguen por el
+      # `command`). context = raíz (el backend importa infra/db/schema). ---------
+      - name: Build and push (backend)
         uses: docker/build-push-action@v6
         with:
           context: .
-          target: worker
+          file: backend/Dockerfile
+          target: runtime
           push: true
           provenance: false
           sbom: false
           tags: |
-            ${{ env.IMAGE }}-worker:${{ env.SHA }}
-            ${{ env.IMAGE }}-worker:latest
+            ${{ env.IMAGE }}-backend:${{ env.SHA }}
+            ${{ env.IMAGE }}-backend:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -294,36 +318,34 @@ jobs:
       # Server-side runtime secrets (NO NEXT_PUBLIC_*): el secreto del proxy
       # OpenPanel (route.ts) y la contraseña del panel admin (lib/admin.ts).
       # app-env tiene TODAS las vars de runtime (DATABASE_URL, VALKEY_URL, R2_*,
-      # ...), así que PATCHEAMOS solo estas claves con un strategic merge — nunca
-      # recreamos el secret (borraría el resto). stringData deja que kubectl haga
-      # el base64. Cada clave se omite si su secret de GH no está seteado.
+      # ...) desde provision, así que PATCHEAMOS solo estas claves con un strategic
+      # merge — nunca recreamos el secret (borraría el resto). stringData deja que
+      # kubectl haga el base64. Cada clave se omite si su secret de GH no está seteado.
+      #
+      # CORS_ORIGINS + TURNSTILE_SECRET_KEY son NUEVAS del split/seguridad (no
+      # existían en el monolito same-origin): CORS_ORIGINS deja que el front llame
+      # cross-origin; TURNSTILE_SECRET_KEY activa requireHuman (anti-bot).
       - name: Patch runtime secrets into app-env
         env:
           OPENPANEL_CLIENT_SECRET: ${{ secrets.OPENPANEL_CLIENT_SECRET }}
           ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
+          CORS_ORIGINS: ${{ secrets.CORS_ORIGINS }}
+          TURNSTILE_SECRET_KEY: ${{ secrets.TURNSTILE_SECRET_KEY }}
         run: |
           set -euo pipefail
           if ! kubectl -n mapa get secret app-env >/dev/null 2>&1; then
             echo "::warning::app-env secret not found — create it at provision time. Skipping."
             exit 0
           fi
-          patch='{}'
-          if [ -n "${OPENPANEL_CLIENT_SECRET:-}" ]; then
-            patch=$(printf '%s' "$patch" | OP="$OPENPANEL_CLIENT_SECRET" \
-              python3 -c 'import json,os,sys; d=json.load(sys.stdin); d["OPENPANEL_CLIENT_SECRET"]=os.environ["OP"]; print(json.dumps(d))')
-          else
-            echo "OPENPANEL_CLIENT_SECRET unset — skipping that key."
-          fi
-          if [ -n "${ADMIN_PASSWORD:-}" ]; then
-            patch=$(printf '%s' "$patch" | AP="$ADMIN_PASSWORD" \
-              python3 -c 'import json,os,sys; d=json.load(sys.stdin); d["ADMIN_PASSWORD"]=os.environ["AP"]; print(json.dumps(d))')
-          else
-            echo "ADMIN_PASSWORD unset — skipping that key."
-          fi
+          # Construimos el patch JSON solo con las claves que SÍ tienen valor
+          # (omitimos las vacías para no pisar con "" lo que ya esté en el secret).
+          patch=$(KEYS="OPENPANEL_CLIENT_SECRET ADMIN_PASSWORD CORS_ORIGINS TURNSTILE_SECRET_KEY" \
+            python3 -c 'import json,os; ks=os.environ["KEYS"].split(); print(json.dumps({k:os.environ[k] for k in ks if os.environ.get(k)}))')
           if [ "$patch" = '{}' ]; then
             echo "No runtime secrets to patch."
             exit 0
           fi
+          echo "Patching app-env keys: $(printf '%s' "$patch" | python3 -c 'import json,sys; print(", ".join(json.load(sys.stdin).keys()))')"
           kubectl -n mapa patch secret app-env --type merge \
             -p "{\"stringData\": ${patch}}"
 
@@ -342,7 +364,7 @@ jobs:
             echo "R2 secrets unset — skipping static upload."
             exit 0
           fi
-          IMAGE="${{ env.IMAGE }}:${{ env.SHA }}"
+          IMAGE="${{ env.IMAGE }}-frontend:${{ env.SHA }}"
           docker pull "$IMAGE"
           CID=$(docker create "$IMAGE")
           rm -rf /tmp/next-static && mkdir -p /tmp/next-static
@@ -427,9 +449,10 @@ jobs:
           else
             echo "cluster-autoscaler-hcloud secret missing — skipping CA."
           fi
-          # Migration worker Deployment (only if migrate-env exists).
+          # Migration worker Deployment (only if migrate-env exists). Reusa la
+          # imagen BACKEND (mismo artefacto que la API; se distingue por command).
           if kubectl -n mapa get secret migrate-env >/dev/null 2>&1; then
-            sed "s#ghcr.io/OWNER/REPO-worker:latest#${{ env.IMAGE }}-worker:${{ env.SHA }}#" \
+            sed "s#ghcr.io/OWNER/REPO-backend:latest#${{ env.IMAGE }}-backend:${{ env.SHA }}#" \
               infra/k8s/worker-deployment.yaml | kubectl apply -f -
           else
             echo "migrate-env not present — skipping worker Deployment."
@@ -444,7 +467,7 @@ jobs:
           JOB="migrate-${{ env.SHA }}"
           kubectl -n mapa delete job "$JOB" --ignore-not-found
           sed -e "s#^  name: migrate\$#  name: ${JOB}#" \
-              -e "s#ghcr.io/OWNER/REPO-worker:latest#${{ env.IMAGE }}-worker:${{ env.SHA }}#" \
+              -e "s#ghcr.io/OWNER/REPO-backend:latest#${{ env.IMAGE }}-backend:${{ env.SHA }}#" \
             infra/k8s/migrate-job.yaml | kubectl apply -f -
           if ! kubectl -n mapa wait --for=condition=complete "job/${JOB}" --timeout=180s; then
             echo "::error::Migration Job did not complete. Logs:"
@@ -456,20 +479,21 @@ jobs:
       - name: Roll to the new image (zero-downtime)
         run: |
           set -euo pipefail
-          # web + api son el MISMO image; parcheamos ambos. maxUnavailable:0 +
-          # readiness /api/readyz garantizan que el LB drene los viejos y solo
-          # enrute a los nuevos Ready (cero downtime). rollout status falla el
-          # deploy si un tier no converge.
-          for tier in web api; do
-            kubectl -n mapa set image "deployment/${tier}" \
-              app=${{ env.IMAGE }}:${{ env.SHA }}
-          done
+          # Tras el split son DOS imágenes distintas: web=frontend, api=backend.
+          # maxUnavailable:0 + readiness garantizan que el LB drene los viejos y
+          # solo enrute a los nuevos Ready (cero downtime). rollout status falla
+          # el deploy si un tier no converge.
+          kubectl -n mapa set image deployment/web \
+            app=${{ env.IMAGE }}-frontend:${{ env.SHA }}
+          kubectl -n mapa set image deployment/api \
+            app=${{ env.IMAGE }}-backend:${{ env.SHA }}
           for tier in web api; do
             kubectl -n mapa rollout status "deployment/${tier}" --timeout=300s
           done
+          # migrate-worker reusa la imagen BACKEND (mismo artefacto, otro command).
           if kubectl -n mapa get deploy migrate-worker >/dev/null 2>&1; then
             kubectl -n mapa set image deployment/migrate-worker \
-              worker=${{ env.IMAGE }}-worker:${{ env.SHA }}
+              worker=${{ env.IMAGE }}-backend:${{ env.SHA }}
             kubectl -n mapa rollout status deployment/migrate-worker --timeout=180s || \
               echo "::warning::migrate-worker roll lagging — check kubectl -n mapa get pods"
           fi

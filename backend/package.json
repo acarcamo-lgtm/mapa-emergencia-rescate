@@ -8,7 +8,10 @@
     "dev": "tsx watch src/server.ts",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/server.js",
-    "typecheck": "tsc --noEmit -p tsconfig.json"
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "migrate": "tsx worker/migrate.ts",
+    "worker": "tsx worker/index.ts",
+    "db:generate": "drizzle-kit generate --config ../infra/db/drizzle.config.ts"
   },
   "dependencies": {
     "express": "^5.1.0",
@@ -17,11 +20,14 @@
     "zod": "^3.23.8",
     "pg": "*",
     "@aws-sdk/client-s3": "*",
-    "bullmq": "*"
+    "bullmq": "*",
+    "turbo-stream": "^2.4.0"
   },
   "devDependencies": {
     "@types/express": "^5.0.0",
     "@types/node": "^20",
+    "@types/pg": "^8.11.10",
+    "drizzle-kit": "*",
     "tsx": "*",
     "typescript": "^5"
   }

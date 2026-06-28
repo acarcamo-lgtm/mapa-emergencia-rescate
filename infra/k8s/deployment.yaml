@@ -1,26 +1,23 @@
-# App Deployments — el MISMO image de Next.js desplegado como DOS tiers:
-#   - web : sirve UI/SSR + (también responde /api porque es el mismo server.js).
-#           Lo enruta el LB público (terremoto…).
-#   - api : sirve la superficie /api para consumidores EXTERNOS (scrapers,
-#           integraciones). Lo enruta un LB aparte (api.terremoto…).
+# App Deployments — DOS tiers, DOS imágenes distintas (tras el split monorepo):
+#   - web : FRONTEND (Next standalone, pura UI, :3000). Llama al backend por URL
+#           absoluta (NEXT_PUBLIC_API_URL). Lo enruta el LB público (terremoto…).
+#   - api : BACKEND (Express, :8080). Sirve TODA la superficie /api (front + 3os).
+#           Lo enruta un LB aparte (api.terremoto…).
 #
-# ¿Por qué dos Deployments del mismo image y no dos servicios/código? Next.js
-# (standalone) sirve TODO desde un solo server.js; no hay "backend" que extraer.
-# Separarlos en dos Deployments + dos Services da AISLAMIENTO de blast-radius y
-# escalado independiente (HPA propio por tier, ver hpa.yaml): una ráfaga de un
-# consumidor de API no puede ahogar el render del front durante una emergencia.
-# Cero cambios de código, cero CORS para el front (sigue usando /api same-origin).
+# Dos Deployments + dos Services = AISLAMIENTO de blast-radius y escalado
+# independiente (HPA propio por tier, ver hpa.yaml): una ráfaga de tráfico a la
+# API no puede ahogar el render del front durante una emergencia. El front ya NO
+# sirve /api: habla con el backend cross-origin (el backend habilita CORS).
 #
 # Zero-downtime (ambos tiers):
 #   - maxUnavailable:0 / maxSurge:1 -> el pod nuevo debe estar Ready ANTES de
 #     quitar uno viejo. Siempre >=1 sirviendo.
-#   - readinessProbe /api/readyz -> el LB solo enruta a pods que pasan el check
-#     de DB. Durante un rollout, el LB drena el viejo (readiness deja de pasar en
-#     preStop) y solo manda tráfico al nuevo.
+#   - readiness: el BACKEND prueba /api/readyz (chequea DB). El FRONTEND no tiene
+#     /api/readyz (es pura UI) -> probe TCP al :3000 (server.js arriba = listo).
 #   - cluster-autoscaler (infra/k8s/cluster-autoscaler.yaml) arranca VPS efímeros cuando
 #     los pods nuevos no caben, y destruye los viejos al drenar (graceful).
 #
-# CI parchea el tag del image por-deploy con `kubectl set image` en AMBOS.
+# CI parchea por-deploy: web -> imagen -frontend:<sha>, api -> -backend:<sha>.
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -65,8 +62,9 @@ spec:
                 topologyKey: kubernetes.io/hostname
       terminationGracePeriodSeconds: 40
       containers:
+        # FRONTEND (Next standalone). CI parchea el tag a -frontend:<sha>.
         - name: app
-          image: ghcr.io/OWNER/REPO:latest
+          image: ghcr.io/OWNER/REPO-frontend:latest
           ports:
             - containerPort: 3000
           envFrom:
@@ -75,17 +73,17 @@ spec:
           env:
             - name: NODE_OPTIONS
               value: "--max-old-space-size=640"
+          # El frontend es pura UI: no tiene /api/readyz. Probe TCP — si el
+          # server.js de Next acepta conexiones en :3000, está listo.
           livenessProbe:
-            httpGet:
-              path: /api/readyz
+            tcpSocket:
               port: 3000
             initialDelaySeconds: 10
             periodSeconds: 20
             timeoutSeconds: 5
             failureThreshold: 6
           readinessProbe:
-            httpGet:
-              path: /api/readyz
+            tcpSocket:
               port: 3000
             initialDelaySeconds: 5
             periodSeconds: 10
@@ -143,10 +141,11 @@ spec:
                 topologyKey: kubernetes.io/hostname
       terminationGracePeriodSeconds: 40
       containers:
+        # BACKEND (Express, :8080). CI parchea el tag a -backend:<sha>.
         - name: app
-          image: ghcr.io/OWNER/REPO:latest
+          image: ghcr.io/OWNER/REPO-backend:latest
           ports:
-            - containerPort: 3000
+            - containerPort: 8080
           envFrom:
             - secretRef:
                 name: app-env
@@ -157,7 +156,7 @@ spec:
           livenessProbe:
             httpGet:
               path: /api/readyz
-              port: 3000
+              port: 8080
             initialDelaySeconds: 10
             periodSeconds: 20
             timeoutSeconds: 5
@@ -165,7 +164,7 @@ spec:
           readinessProbe:
             httpGet:
               path: /api/readyz
-              port: 3000
+              port: 8080
             initialDelaySeconds: 5
             periodSeconds: 10
             timeoutSeconds: 5

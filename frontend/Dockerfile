@@ -35,6 +35,9 @@ ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 # enlaces directos al CDN si se necesitan. Prod: https://bucket-vzla-terremoto.dreamit.software
 ARG NEXT_PUBLIC_R2_PUBLIC_BASE
 ENV NEXT_PUBLIC_R2_PUBLIC_BASE=$NEXT_PUBLIC_R2_PUBLIC_BASE
+# Cloudflare Turnstile site key (público, se inlinea en build) para el widget.
+ARG NEXT_PUBLIC_TURNSTILE_SITE_KEY
+ENV NEXT_PUBLIC_TURNSTILE_SITE_KEY=$NEXT_PUBLIC_TURNSTILE_SITE_KEY
 RUN npm run build
 
 # ---- runtime: slim, no-root ----

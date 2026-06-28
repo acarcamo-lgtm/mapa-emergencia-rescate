@@ -10,6 +10,7 @@ import {
 } from "@/lib/donation-shared";
 import { useCreateDonation } from "@/hooks/donations";
 import { trackEvent } from "./openpanel";
+import { useTurnstile } from "./useTurnstile";
 
 const SUGGESTED_AMOUNTS = [500, 1000, 2500, 5000, 10000] as const;
 
@@ -37,6 +38,7 @@ export function DonateModal({
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const createDonation = useCreateDonation();
+  const turnstile = useTurnstile();
 
   useEffect(() => {
     setMounted(true);
@@ -92,7 +94,9 @@ export function DonateModal({
 
     setSubmitting(true);
     try {
-      const data = await createDonation.mutateAsync({ name, amountCents });
+      // Token FRESCO de Turnstile para este envío (se resetea tras leerlo).
+      const turnstileToken = await turnstile.getToken();
+      const data = await createDonation.mutateAsync({ name, amountCents, turnstileToken });
 
       trackEvent("donation_intent", { amountCents });
 
@@ -249,6 +253,8 @@ export function DonateModal({
               {successMessage}
             </p>
           )}
+
+          <div ref={turnstile.ref} className="flex justify-center empty:hidden" />
 
           <button
             type="submit"

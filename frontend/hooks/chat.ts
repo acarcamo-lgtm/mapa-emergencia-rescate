@@ -38,6 +38,7 @@ export interface SendChatInput {
   text: string;
   role: ChatRole;
   replyTo: string | null;
+  turnstileToken?: string; // prueba de humanidad (Turnstile) para el backend
 }
 
 export function useSendChatMessage() {
