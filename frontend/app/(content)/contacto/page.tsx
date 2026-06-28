@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
-import ContactForm from "../components/ContactForm";
-import SubPageShell from "../components/SubPageShell";
+import ContactForm from "@/app/components/ContactForm";
+import SubPageShell from "@/app/components/SubPageShell";
 import { CONTACT_EMAIL, contactMailto } from "@/lib/site";
 
 export const metadata: Metadata = {

@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import SubPageShell from "../components/SubPageShell";
+import SubPageShell from "@/app/components/SubPageShell";
 import { Info } from "lucide-react";
 import OfertasList from "./OfertasList";
 

@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import SubPageShell from "../components/SubPageShell";
+import SubPageShell from "@/app/components/SubPageShell";
 
 export const metadata: Metadata = {
   title: "Registrarme como voluntario · Mapa de Emergencia Venezuela",

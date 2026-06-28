@@ -7,7 +7,7 @@ import {
   REPORT_TYPE_KEYS,
   type ReportType,
 } from "@/lib/types";
-import AdminLogin from "../components/AdminLogin";
+import AdminLogin from "@/app/components/AdminLogin";
 import { formatDonationUsd } from "@/lib/donation-shared";
 import { apiFetch } from "@/lib/api";
 import HospitalSuppliesPanel from "./HospitalSuppliesPanel";
