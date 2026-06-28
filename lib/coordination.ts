@@ -156,6 +156,8 @@ function reportCategory(type: ReportType): CoordinationNeedCategory {
       return "inspection";
     case "missing":
       return "person_search";
+    case "starlink":
+      return "communications";
   }
 }
 
