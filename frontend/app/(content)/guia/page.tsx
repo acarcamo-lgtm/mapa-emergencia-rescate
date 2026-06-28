@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import SubPageShell from "@/components/layout/SubPageShell";
 
 const SurvivalGuide = dynamic(
-  () => import("@/app/components/SurvivalGuide"),
+  () => import("@/components/features/guide/SurvivalGuide"),
   {
     loading: () => (
       <section className="mx-auto w-full max-w-7xl px-4 py-10 text-sm text-slate-500">

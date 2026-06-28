@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import SubPageShell from "@/components/layout/SubPageShell";
 
 const CollectionCenters = dynamic(
-  () => import("@/app/components/CollectionCenters"),
+  () => import("@/components/features/collection/CollectionCenters"),
   {
     loading: () => (
       <section className="mx-auto w-full max-w-7xl px-4 py-10 text-sm text-slate-500">

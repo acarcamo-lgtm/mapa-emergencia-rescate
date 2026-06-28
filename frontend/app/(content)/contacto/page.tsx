@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import ContactForm from "@/app/components/ContactForm";
+import ContactForm from "@/components/features/contacts/ContactForm";
 import SubPageShell from "@/components/layout/SubPageShell";
 import { CONTACT_EMAIL, contactMailto } from "@/lib/site";
 
