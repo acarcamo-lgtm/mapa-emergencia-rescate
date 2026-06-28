@@ -8,19 +8,47 @@ import { memo } from "react";
  */
 export interface SearchInputProps {
   value: string;
-  onChange: (value: string) => void;
+  /** Cambio de valor. Alias: `onValueChange` (mismo callback). */
+  onChange?: (value: string) => void;
+  /** Alias de `onChange` usado por algunos consumidores. */
+  onValueChange?: (value: string) => void;
   placeholder?: string;
   ariaLabel?: string;
+  /** Alias DOM de `ariaLabel`. */
+  "aria-label"?: string;
+  /** Etiqueta visible opcional (se asocia al input por `id`). */
+  label?: string;
+  /** id del input (necesario si se usa `label`). */
+  id?: string;
+  /** Clases extra para el contenedor. */
+  className?: string;
+  autoComplete?: string;
 }
 
 function SearchInputImpl({
   value,
   onChange,
+  onValueChange,
   placeholder = "Buscar…",
   ariaLabel = "Buscar",
+  "aria-label": ariaLabelDom,
+  label,
+  id,
+  className,
+  autoComplete,
 }: SearchInputProps) {
+  const emit = onChange ?? onValueChange ?? (() => {});
   return (
-    <div className="flex flex-1 items-center gap-2 rounded-xl border border-[var(--eborder)] bg-[var(--einput)] px-3 py-1.5">
+    <div
+      className={`flex flex-1 items-center gap-2 rounded-xl border border-[var(--eborder)] bg-[var(--einput)] px-3 py-1.5${
+        className ? ` ${className}` : ""
+      }`}
+    >
+      {label && (
+        <label htmlFor={id} className="sr-only">
+          {label}
+        </label>
+      )}
       <svg
         viewBox="0 0 24 24"
         fill="none"
@@ -36,17 +64,19 @@ function SearchInputImpl({
       </svg>
       <input
         type="search"
+        id={id}
         value={value}
-        onChange={(e) => onChange(e.target.value)}
+        onChange={(e) => emit(e.target.value)}
         placeholder={placeholder}
-        aria-label={ariaLabel}
+        aria-label={ariaLabelDom ?? ariaLabel}
+        autoComplete={autoComplete}
         enterKeyHint="search"
         className="min-w-0 flex-1 bg-transparent py-1 text-sm text-[var(--etext)] outline-none placeholder:text-[var(--etext3)]"
       />
       {value && (
         <button
           type="button"
-          onClick={() => onChange("")}
+          onClick={() => emit("")}
           aria-label="Limpiar búsqueda"
           className="grid h-6 w-6 shrink-0 place-items-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
         >

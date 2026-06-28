@@ -101,5 +101,5 @@ function PaginationImpl({
   );
 }
 
-const Pagination = memo(PaginationImpl);
+export const Pagination = memo(PaginationImpl);
 export default Pagination;

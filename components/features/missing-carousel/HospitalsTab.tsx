@@ -42,7 +42,8 @@ export function HospitalsTab() {
   );
   const gridCols = useHospitalGridColumns();
 
-  const { data: hospitals = [], isLoading } = useHospitals({ limit: 1000 });
+  const { data, isLoading } = useHospitals();
+  const hospitals = data?.hospitals ?? [];
   const loading = isLoading;
 
   const visible = useMemo(
