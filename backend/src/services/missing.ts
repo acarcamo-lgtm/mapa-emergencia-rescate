@@ -305,6 +305,27 @@ export async function listMissingPage(
   return { people: rows.map(rowToPerson), total, page, pageSize, totalPages, totalCapped };
 }
 
+/** Lista COMPLETA (sin paginar) para el panel admin. includeFound=true trae
+ *  también las localizadas. DTO allowlist (rowToPerson) — sin fotos crudas. */
+export async function listMissing(
+  options: { includeFound?: boolean } = {},
+): Promise<MissingDTO[]> {
+  const db = await getDb();
+  const whereSql = options.includeFound ? sql`` : sql`WHERE status = 'active'`;
+  const res = await db.execute(
+    sql`SELECT id, name, age, nationality, description, last_seen, contact,
+               (photo IS NOT NULL) AS has_photo,
+               photo_external_url,
+               status,
+               resolution_note,
+               (resolution_photo IS NOT NULL) AS has_resolution_photo,
+               resolved_at, created_at
+        FROM missing_persons ${whereSql}
+        ORDER BY created_at DESC, id DESC`,
+  );
+  return execRows<Row>(res).map(rowToPerson);
+}
+
 export async function addMissing(input: CreateInput): Promise<MissingDTO> {
   const id = crypto.randomUUID();
   const name = (input.name ?? "").trim().slice(0, MAX_NAME);

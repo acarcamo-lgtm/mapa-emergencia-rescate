@@ -14,6 +14,13 @@ import { serviceUnavailable } from "@/lib/errors";
 import * as adminSvc from "@/services/admin";
 import * as donationsSvc from "@/services/donations";
 import * as contactSvc from "@/services/contact";
+import * as reportsSvc from "@/services/reports";
+import * as chatSvc from "@/services/chat";
+import * as missingSvc from "@/services/missing";
+import * as syncSvc from "@/services/sync";
+
+const HOUR = 60 * 60 * 1000;
+const DAY = 24 * HOUR;
 
 export const adminRouter = Router();
 
@@ -159,5 +166,76 @@ adminRouter.patch(
       return;
     }
     res.json({ ok: true });
+  }),
+);
+
+/**
+ * @swagger
+ * /api/admin/data:
+ *   get:
+ *     tags: [admin]
+ *     summary: Panel admin con datos agregados (requiere admin)
+ *     responses:
+ *       200: { description: Estadísticas y colecciones completas. }
+ *       401: { description: No autorizado. }
+ */
+adminRouter.get(
+  "/data",
+  requireAdmin,
+  asyncHandler(async (_req, res) => {
+    const [reports, messages, people, syncRuns, syncState] = await Promise.all([
+      reportsSvc.listReports(),
+      chatSvc.listMessages(),
+      missingSvc.listMissing({ includeFound: true }),
+      syncSvc.listSyncRuns(15),
+      syncSvc.listSyncState(),
+    ]);
+    const now = Date.now();
+
+    const byType = Object.fromEntries(
+      reportsSvc.REPORT_TYPE_KEYS.map((k) => [k, 0]),
+    ) as Record<string, number>;
+    let totalAffected = 0;
+    let reportsLastHour = 0;
+    let reportsLast24h = 0;
+    let reportsWithPhoto = 0;
+    for (const report of reports) {
+      if (byType[report.type] !== undefined) byType[report.type] = (byType[report.type] ?? 0) + 1;
+      totalAffected += report.affected;
+      if (now - report.createdAt <= HOUR) reportsLastHour += 1;
+      if (now - report.createdAt <= DAY) reportsLast24h += 1;
+      if (report.photoUrl) reportsWithPhoto += 1;
+    }
+
+    const messagesLastHour = messages.filter((m) => now - m.createdAt <= HOUR).length;
+    const peopleWithPhoto = people.filter((p) => p.photoUrl).length;
+    const peopleFound = people.filter((p) => p.status === "found").length;
+    const peopleActive = people.length - peopleFound;
+
+    res.set(NO_STORE).json({
+      generatedAt: now,
+      persistent: true,
+      stats: {
+        reports: {
+          total: reports.length,
+          byType,
+          totalAffected,
+          lastHour: reportsLastHour,
+          last24h: reportsLast24h,
+          withPhoto: reportsWithPhoto,
+        },
+        chat: { total: messages.length, lastHour: messagesLastHour },
+        missing: {
+          total: people.length,
+          active: peopleActive,
+          found: peopleFound,
+          withPhoto: peopleWithPhoto,
+        },
+      },
+      reports,
+      messages,
+      people,
+      sync: { runs: syncRuns, state: syncState },
+    });
   }),
 );
