@@ -1,6 +1,7 @@
 "use client";
 
 import { OpenPanelComponent } from "@openpanel/nextjs";
+import { apiUrl } from "@/lib/api";
 
 const PRODUCTION_HOST =
   process.env.NEXT_PUBLIC_OPENPANEL_PRODUCTION_HOST ?? "terremotovenezuela.app";
@@ -15,8 +16,13 @@ export default function OpenPanelProduction({
 
   return (
     <OpenPanelComponent
-      apiUrl="/api/op"
-      scriptUrl="/api/op/op1.js"
+      // El proxy de OpenPanel vive en el BACKEND (`/api/op/*`, ver
+      // backend/src/routes/op.ts). Tras el split web/api, pasar rutas relativas
+      // las resolvería contra el origen del frontend (terremotovenezuela.app),
+      // que ya no sirve `/api/op` → script 404 y eventos perdidos. `apiUrl()`
+      // las ancla a API_BASE (api.terremotovenezuela.app).
+      apiUrl={apiUrl("/api/op")}
+      scriptUrl={apiUrl("/api/op/op1.js")}
       clientId={clientId}
       trackScreenViews
       trackOutgoingLinks
