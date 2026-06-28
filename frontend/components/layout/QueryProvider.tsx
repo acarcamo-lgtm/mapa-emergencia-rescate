@@ -2,7 +2,7 @@
 
 import { useState, type ReactNode } from "react";
 import { QueryClientProvider } from "@tanstack/react-query";
-import { makeQueryClient } from "@/lib/query-client";
+import { makeQueryClient } from "@/lib/get-query-client";
 
 /**
  * Provider de TanStack Query. El QueryClient se crea UNA vez por montaje del

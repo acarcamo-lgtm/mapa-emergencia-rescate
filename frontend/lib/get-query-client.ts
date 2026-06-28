@@ -1,6 +1,4 @@
-"use client";
-
-import { QueryClient } from "@tanstack/react-query";
+import { QueryClient, isServer } from "@tanstack/react-query";
 
 /**
  * Config global de TanStack Query. Estos defaults resuelven, de raíz, los
@@ -35,4 +33,17 @@ export function makeQueryClient(): QueryClient {
       },
     },
   });
+}
+
+let browserQueryClient: QueryClient | undefined;
+
+/**
+ * Server: SIEMPRE un cliente nuevo (aislado por request, sin fuga de cache
+ * entre usuarios). Browser: singleton de módulo (un solo cache para la pestaña;
+ * sobrevive a suspense/HMR). Usado por el provider y por el prefetch en RSC.
+ */
+export function getQueryClient(): QueryClient {
+  if (isServer) return makeQueryClient();
+  if (!browserQueryClient) browserQueryClient = makeQueryClient();
+  return browserQueryClient;
 }
