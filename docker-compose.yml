@@ -9,6 +9,10 @@
 # Datos reales de prod viven en el volumen `postgres_data` (cargados por dump SSH).
 # Persisten entre up/down; solo `down -v` los borra.
 #
+# El servicio one-shot `migrate-seed` aplica migraciones y siembra datos DEMO
+# (SOLO local) antes de que arranque el backend. Es idempotente y se niega a
+# correr si detecta datos NO-demo (no mezcla fixtures con un dump real).
+#
 # Wiring API (como en prod): el frontend llama al backend por URL ABSOLUTA
 # (NEXT_PUBLIC_API_URL). El browser corre fuera de la red de Docker, así que la
 # URL es http://localhost:8080 (NO el nombre de servicio). NEXT_PUBLIC_* se
@@ -43,6 +47,21 @@ services:
       timeout: 3s
       retries: 10
 
+  migrate-seed:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    command: sh -c 'npm run migrate && { [ "$$SKIP_SEED" = "1" ] && echo "[seed] omitido (SKIP_SEED=1)" || npm run seed; }'
+    environment:
+      NODE_ENV: development
+      DATABASE_URL: postgres://mapa_app:localdev@db:5432/app
+      MIGRATIONS_DIR: ../infra/db/migrations
+      SKIP_SEED: "${SKIP_SEED:-0}"
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+
   backend:
     build:
       context: .
@@ -64,6 +83,8 @@ services:
         condition: service_healthy
       valkey:
         condition: service_healthy
+      migrate-seed:
+        condition: service_completed_successfully
 
   frontend:
     build:
