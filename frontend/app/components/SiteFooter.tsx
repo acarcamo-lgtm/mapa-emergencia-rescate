@@ -175,12 +175,26 @@ export default function SiteFooter() {
             . En caso de peligro inmediato, contacta también a los servicios
             de emergencia oficiales.
           </p>
-          <a
-            href="/admin"
-            className="text-[var(--etext3)] hover:text-[var(--etext2)] hover:underline"
-          >
-            Panel de administración
-          </a>
+          <div className="flex flex-wrap items-center justify-center gap-x-5 gap-y-2 sm:shrink-0 sm:justify-end">
+            <Link
+              href="/riesgo-sismico"
+              className="whitespace-nowrap text-[var(--etext3)] hover:text-[var(--etext2)] hover:underline"
+            >
+              Riesgo sísmico
+            </Link>
+            <Link
+              href="/privacidad"
+              className="whitespace-nowrap text-[var(--etext3)] hover:text-[var(--etext2)] hover:underline"
+            >
+              Privacidad
+            </Link>
+            <a
+              href="/admin"
+              className="whitespace-nowrap text-[var(--etext3)] hover:text-[var(--etext2)] hover:underline"
+            >
+              Panel de administración
+            </a>
+          </div>
         </div>
       </div>
     </footer>
