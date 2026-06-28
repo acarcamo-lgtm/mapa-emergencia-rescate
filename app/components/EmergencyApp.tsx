@@ -113,15 +113,17 @@ export default function EmergencyApp() {
 	const [selectedTypes, setSelectedTypes] = useState<Set<ReportType>>(
 		() => new Set<ReportType>(["critical"]),
 	);
-	const [confirmed, setConfirmed] = useState<Set<string>>(() => {
-		if (typeof window === "undefined") return new Set();
+	const [confirmed, setConfirmed] = useState<Set<string>>(() => new Set());
+
+	// Hidratación de localStorage después del montaje para evitar mismatch server/client.
+	useEffect(() => {
 		try {
 			const stored = localStorage.getItem("emergency:confirmed");
-			return stored ? new Set(JSON.parse(stored)) : new Set();
+			if (stored) setConfirmed(new Set(JSON.parse(stored)));
 		} catch {
-			return new Set();
+			/* localStorage no disponible o datos corruptos */
 		}
-	});
+	}, []);
 	const [now, setNow] = useState<number>(() => Date.now());
 	const [query, setQuery] = useState("");
 	const [listLimit, setListLimit] = useState(LIST_PAGE_SIZE);
@@ -139,30 +141,26 @@ export default function EmergencyApp() {
 	const [pendingCount, setPendingCount] = useState(0);
 	const [queuedFlash, setQueuedFlash] = useState(false);
 	const flushingRef = useRef(false);
-	const [adminToken, setAdminToken] = useState<string | null>(() =>
-		typeof window === "undefined"
-			? null
-			: sessionStorage.getItem(ADMIN_STORAGE_KEY),
-	);
+	const [adminToken, setAdminToken] = useState<string | null>(null);
 	const [showAdminLogin, setShowAdminLogin] = useState(false);
 	const [focus, setFocus] = useState<{
 		lat: number;
 		lng: number;
 		ts: number;
 		id?: string;
-	} | null>(() => {
-		// Enlace profundo: si la URL trae lat/lng (link compartido de un reporte),
-		// arrancamos con el foco en ese punto para que el mapa vuele hasta él.
-		if (typeof window === "undefined") return null;
+	} | null>(null);
+
+	// Hidratación de deep-link (lat/lng en la URL) después del montaje.
+	useEffect(() => {
 		const params = new URLSearchParams(window.location.search);
 		const latRaw = params.get("lat");
 		const lngRaw = params.get("lng");
-		if (!latRaw || !lngRaw) return null;
+		if (!latRaw || !lngRaw) return;
 		const lat = Number(latRaw);
 		const lng = Number(lngRaw);
-		if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
-		return { lat, lng, ts: Date.now() };
-	});
+		if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+		setFocus({ lat, lng, ts: Date.now() });
+	}, []);
 	const [missingStats, setMissingStats] = useState<MissingStats | null>(null);
 	const [missingMapMarkers, setMissingMapMarkers] = useState<
 		MissingMapMarker[]
@@ -206,6 +204,14 @@ export default function EmergencyApp() {
 	const logoutAdmin = useCallback(() => {
 		sessionStorage.removeItem(ADMIN_STORAGE_KEY);
 		setAdminToken(null);
+	}, []);
+
+	// Lee el token de admin del sessionStorage después de la hidratación para
+	// evitar un mismatch entre server y client (el servidor siempre renderiza
+	// con null; el cliente lee el valor real tras montar).
+	useEffect(() => {
+		const token = sessionStorage.getItem(ADMIN_STORAGE_KEY);
+		if (token) setAdminToken(token);
 	}, []);
 
 	const fetchReports = useCallback(async () => {

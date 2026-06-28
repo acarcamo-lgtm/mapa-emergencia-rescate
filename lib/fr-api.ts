@@ -1,7 +1,15 @@
-export const FR_API_URL =
+const RAW =
   process.env.FR_API_URL || "https://fr-api.reportavnzla.com:8443";
+export const FR_API_URL = (/^https?:\/\//i.test(RAW)
+  ? RAW
+  : `https://${RAW}`
+).replace(/\/+$/, "");
 export const FR_API_KEY = process.env.FR_API_KEY || "";
 export const FR_MIN_SCORE = Number(process.env.FR_MIN_SCORE || "0.55");
+export const FR_SOURCE = process.env.FR_SOURCE || "terremotovenezuela";
+
+export const frConfigured = () => Boolean(FR_API_KEY);
+export const frHeaders = () => ({ "X-API-Key": FR_API_KEY });
 
 export interface FrSearchCandidate {
   record_id: string;
@@ -35,96 +43,105 @@ export interface FrSearchError {
   status: number;
 }
 
-export interface FrIndexResponse {
-  ok: boolean;
-  indexed: boolean;
+export interface FrDuplicateCandidate {
   record_id: string;
+  person_name: string | null;
+  image_url: string | null;
+  score: number;
+  source: string;
 }
 
-export interface FrIndexError {
-  ok: false;
-  error: string;
-  status: number;
+export interface FrDuplicateResponse {
+  ok: true;
+  possible_duplicate: boolean;
+  candidates?: FrDuplicateCandidate[];
+  no_face?: boolean;
 }
 
 /**
- * Index a person's photo in the FR-API so other platforms can find them.
- * Idempotent by external_id — re-calling with the same id won't duplicate.
- * The photo can be a File or a data URL string (converted to File internally).
+ * Origen público absoluto del sitio. El FR-API descarga la foto desde su
+ * propio servidor (no desde el cliente), por lo que `image_url` debe ser
+ * una URL pública alcanzable desde internet. En local (`localhost`) el
+ * FR-API no podría descargarla, así que preferimos una variable de entorno
+ * explícita cuando esté definida.
+ *
+ * Prioridad: NEXT_PUBLIC_SITE_URL > SITE_URL > VERCEL_URL > origin del
+ * request (con warning si es localhost).
  */
-export async function indexFace(
-  externalId: string,
-  personName: string,
-  lastSeenLocation: string,
-  photo: File | string,
-): Promise<FrIndexResponse | FrIndexError> {
-  if (!FR_API_KEY) {
-    return { ok: false, error: "FR_API_KEY no configurada en el servidor.", status: 500 };
-  }
-
-  const formData = new FormData();
-  formData.append("external_id", externalId);
-  formData.append("person_name", personName);
-  formData.append("last_seen_location", lastSeenLocation);
-
-  if (typeof photo === "string") {
-    // Data URL → File
-    const match = photo.match(/^data:image\/(jpeg|png|webp);base64,(.+)$/);
-    if (!match) {
-      return { ok: false, error: "Foto inválida para indexar.", status: 400 };
+export function publicSiteOrigin(request?: Request): string {
+  const fromEnv =
+    process.env.NEXT_PUBLIC_SITE_URL ||
+    process.env.SITE_URL ||
+    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "");
+  if (fromEnv) return fromEnv.replace(/\/+$/, "");
+  if (request) {
+    const origin = new URL(request.url).origin;
+    if (/localhost|127\.0\.0\.1/i.test(origin)) {
+      console.warn(
+        `fr-api: image_url usaría origen local (${origin}); el FR-API no podrá descargar la foto. Define NEXT_PUBLIC_SITE_URL.`,
+      );
     }
-    const mimeType = `image/${match[1]}`;
-    const binary = atob(match[2]);
-    const bytes = new Uint8Array(binary.length);
-    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-    const ext = match[1] === "jpeg" ? "jpg" : match[1];
-    formData.append("file", new File([bytes], `index.${ext}`, { type: mimeType }));
-  } else {
-    formData.append("file", photo);
+    return origin;
   }
+  return "https://terremotovenezuela.app";
+}
+
+/**
+ * Indexa una persona en el FR-API para que otras plataformas puedan
+ * encontrarla por reconocimiento facial.
+ *
+ * - Es idempotente por `external_id`: re-indexar no duplica.
+ * - Es best-effort: nunca lanza, nunca bloquea el registro principal.
+ * - Usa la URL pública de la foto (`image_url`), no datos privados.
+ * - Incluye `source` para mantener un único origen consistente en el índice.
+ */
+export async function frIndexPerson(p: {
+  externalId: string;
+  imageUrl: string | null;
+  name?: string | null;
+  location?: string | null;
+}): Promise<void> {
+  if (!frConfigured() || !p.imageUrl) return;
+
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), 15_000);
 
   try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 15_000);
+    const fd = new FormData();
+    fd.append("external_id", p.externalId);
+    fd.append("image_url", p.imageUrl);
+    fd.append("source", FR_SOURCE);
+    if (p.name) fd.append("person_name", p.name);
+    if (p.location) fd.append("last_seen_location", p.location);
 
-    const res = await fetch(`${FR_API_URL}/v1/index`, {
+    await fetch(`${FR_API_URL}/v1/index`, {
       method: "POST",
-      headers: { "X-API-Key": FR_API_KEY },
-      body: formData,
-      signal: controller.signal,
+      headers: frHeaders(),
+      body: fd,
+      signal: ctrl.signal,
     });
-    clearTimeout(timeout);
-
-    if (!res.ok) {
-      return {
-        ok: false,
-        error: res.status === 422
-          ? "No se detectó ningún rostro en la foto."
-          : `Error del servicio de reconocimiento facial (${res.status}).`,
-        status: res.status,
-      };
-    }
-
-    const data: FrIndexResponse = await res.json();
-    return data;
-  } catch (err) {
-    if (err instanceof DOMException && err.name === "AbortError") {
-      return { ok: false, error: "El servicio de reconocimiento facial tardó demasiado.", status: 504 };
-    }
-    return { ok: false, error: "No se pudo conectar con el servicio de reconocimiento facial.", status: 502 };
+  } catch {
+    /* asistivo: nunca rompe el registro */
+  } finally {
+    clearTimeout(t);
   }
 }
 
 /**
- * Search the FR-API index for faces similar to the given image file.
- * Returns the top matches with score >= minScore, or an error.
+ * Busca rostros similares en el índice del FR-API a partir de un archivo.
+ * Usar solo desde rutas protegidas (admin); el cliente público no debe
+ * llamar a búsqueda directamente.
  */
 export async function searchFace(
   file: File,
   minScore = FR_MIN_SCORE,
 ): Promise<FrSearchResponse | FrSearchError> {
-  if (!FR_API_KEY) {
-    return { ok: false, error: "FR_API_KEY no configurada en el servidor.", status: 500 };
+  if (!frConfigured()) {
+    return {
+      ok: false,
+      error: "FR_API_KEY no configurada en el servidor.",
+      status: 500,
+    };
   }
 
   const formData = new FormData();
@@ -136,7 +153,7 @@ export async function searchFace(
 
     const res = await fetch(`${FR_API_URL}/v1/search`, {
       method: "POST",
-      headers: { "X-API-Key": FR_API_KEY },
+      headers: frHeaders(),
       body: formData,
       signal: controller.signal,
     });
@@ -146,9 +163,10 @@ export async function searchFace(
       const body = await res.text().catch(() => "");
       return {
         ok: false,
-        error: res.status === 422
-          ? "No se detectó ningún rostro en la foto."
-          : `Error del servicio de reconocimiento facial (${res.status}).`,
+        error:
+          res.status === 422
+            ? "No se detectó ningún rostro en la foto."
+            : `Error del servicio de reconocimiento facial (${res.status}).`,
         status: res.status,
       };
     }
@@ -156,7 +174,11 @@ export async function searchFace(
     const data: FrSearchResponse = await res.json();
 
     if (!data.ok) {
-      return { ok: false, error: "El servicio de reconocimiento facial no respondió correctamente.", status: 502 };
+      return {
+        ok: false,
+        error: "El servicio de reconocimiento facial no respondió correctamente.",
+        status: 502,
+      };
     }
 
     data.results = data.results.filter((r) => r.score >= minScore);
@@ -164,8 +186,16 @@ export async function searchFace(
     return data;
   } catch (err) {
     if (err instanceof DOMException && err.name === "AbortError") {
-      return { ok: false, error: "El servicio de reconocimiento facial tardó demasiado.", status: 504 };
+      return {
+        ok: false,
+        error: "El servicio de reconocimiento facial tardó demasiado.",
+        status: 504,
+      };
     }
-    return { ok: false, error: "No se pudo conectar con el servicio de reconocimiento facial.", status: 502 };
+    return {
+      ok: false,
+      error: "No se pudo conectar con el servicio de reconocimiento facial.",
+      status: 502,
+    };
   }
 }

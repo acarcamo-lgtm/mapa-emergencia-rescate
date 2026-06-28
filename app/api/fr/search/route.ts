@@ -1,13 +1,21 @@
 import { NextResponse } from "next/server";
 import { searchFace } from "@/lib/fr-api";
+import { isAdminRequest } from "@/lib/admin";
 import { checkRateLimit, clientIp } from "@/lib/ratelimit";
 
+export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const MAX_SEARCH_PHOTO_CHARS = 1_400_000;
-
 export async function POST(request: Request) {
-  const allowed = await checkRateLimit(`fr-search:${clientIp(request)}`, 10);
+  // La guía FR-API indica que /v1/search debe ir detrás de la auth de admin.
+  if (!isAdminRequest(request)) {
+    return NextResponse.json(
+      { ok: false, error: "No autorizado." },
+      { status: 401 },
+    );
+  }
+
+  const allowed = await checkRateLimit(`fr-search:${clientIp(request)}`, 60);
   if (!allowed) {
     return NextResponse.json(
       { error: "Vas muy rápido. Espera un momento antes de buscar de nuevo." },
@@ -15,9 +23,9 @@ export async function POST(request: Request) {
     );
   }
 
-  let body: { photo?: string };
+  let form: FormData;
   try {
-    body = await request.json();
+    form = await request.formData();
   } catch {
     return NextResponse.json(
       { error: "Solicitud inválida." },
@@ -25,41 +33,22 @@ export async function POST(request: Request) {
     );
   }
 
-  if (!body.photo || typeof body.photo !== "string") {
+  const file = form.get("file");
+  if (!(file instanceof Blob)) {
     return NextResponse.json(
       { error: "Se requiere una foto para la búsqueda." },
       { status: 400 },
     );
   }
 
-  if (body.photo.length > MAX_SEARCH_PHOTO_CHARS) {
-    return NextResponse.json(
-      { error: "La foto es demasiado grande." },
-      { status: 413 },
-    );
-  }
+  // Convertimos el Blob en File para mantener la interfaz de lib/fr-api.
+  const searchFile = new File(
+    [file],
+    file instanceof File ? file.name : "search.jpg",
+    { type: file.type || "image/jpeg" },
+  );
 
-  const dataUrlRegex = /^data:image\/(jpeg|png|webp);base64,(.+)$/;
-  const match = body.photo.match(dataUrlRegex);
-  if (!match) {
-    return NextResponse.json(
-      { error: "La foto debe ser una imagen JPG, PNG o WebP válida." },
-      { status: 400 },
-    );
-  }
-
-  const mimeType = `image/${match[1]}`;
-  const base64 = match[2];
-  const binary = atob(base64);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) {
-    bytes[i] = binary.charCodeAt(i);
-  }
-
-  const ext = match[1] === "jpeg" ? "jpg" : match[1];
-  const file = new File([bytes], `search.${ext}`, { type: mimeType });
-
-  const result = await searchFace(file);
+  const result = await searchFace(searchFile);
 
   if (!result.ok) {
     return NextResponse.json(

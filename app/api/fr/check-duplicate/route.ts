@@ -1,5 +1,10 @@
 import { NextResponse } from "next/server";
-import { FR_API_URL, FR_API_KEY } from "@/lib/fr-api";
+import {
+  FR_API_URL,
+  frConfigured,
+  frHeaders,
+  type FrDuplicateResponse,
+} from "@/lib/fr-api";
 import { checkRateLimit, clientIp } from "@/lib/ratelimit";
 
 export const runtime = "nodejs";
@@ -8,7 +13,10 @@ export const dynamic = "force-dynamic";
 const MAX_PHOTO_CHARS = 1_400_000;
 
 export async function POST(request: Request) {
-  const allowed = await checkRateLimit(`fr-check-dup:${clientIp(request)}`, 10);
+  const allowed = await checkRateLimit(
+    `fr-check-dup:${clientIp(request)}`,
+    10,
+  );
   if (!allowed) {
     return NextResponse.json(
       { ok: true, possible_duplicate: false, error: "rate_limited" },
@@ -16,7 +24,7 @@ export async function POST(request: Request) {
     );
   }
 
-  if (!FR_API_KEY) {
+  if (!frConfigured()) {
     return NextResponse.json({
       ok: true,
       possible_duplicate: false,
@@ -26,36 +34,19 @@ export async function POST(request: Request) {
 
   let photo = "";
   try {
-    const body = await request.json();
-    photo = body?.photo || "";
+    photo = (await request.json())?.photo || "";
   } catch {
-    return NextResponse.json({
-      ok: true,
-      possible_duplicate: false,
-    });
+    return NextResponse.json({ ok: true, possible_duplicate: false });
   }
 
-  if (!photo || typeof photo !== "string") {
-    return NextResponse.json({
-      ok: true,
-      possible_duplicate: false,
-    });
-  }
-
-  if (photo.length > MAX_PHOTO_CHARS) {
-    return NextResponse.json({
-      ok: true,
-      possible_duplicate: false,
-    });
+  if (!photo || typeof photo !== "string" || photo.length > MAX_PHOTO_CHARS) {
+    return NextResponse.json({ ok: true, possible_duplicate: false });
   }
 
   const m =
     /^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=]+)$/.exec(photo);
   if (!m) {
-    return NextResponse.json({
-      ok: true,
-      possible_duplicate: false,
-    });
+    return NextResponse.json({ ok: true, possible_duplicate: false });
   }
 
   try {
@@ -66,23 +57,25 @@ export async function POST(request: Request) {
       "foto.jpg",
     );
 
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 15_000);
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 15_000);
 
     const res = await fetch(`${FR_API_URL}/v1/check-duplicate`, {
       method: "POST",
-      headers: { "X-API-Key": FR_API_KEY },
+      headers: frHeaders(),
       body: fd,
-      signal: controller.signal,
+      signal: ctrl.signal,
     });
-    clearTimeout(timeout);
+
+    clearTimeout(t);
 
     if (res.status === 422) {
-      return NextResponse.json({
+      const body: FrDuplicateResponse = {
         ok: true,
         possible_duplicate: false,
         no_face: true,
-      });
+      };
+      return NextResponse.json(body);
     }
 
     const text = await res.text();

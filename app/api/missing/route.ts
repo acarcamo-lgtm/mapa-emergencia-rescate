@@ -9,7 +9,7 @@ import {
   MIN_SEARCH_LEN,
   type MissingStatusFilter,
 } from "@/lib/missing";
-import { indexFace } from "@/lib/fr-api";
+import { frIndexPerson, publicSiteOrigin } from "@/lib/fr-api";
 import { isPersistent } from "@/lib/store";
 import { checkRateLimit, clientIp } from "@/lib/ratelimit";
 import { cached } from "@/lib/cache";
@@ -132,9 +132,20 @@ export async function POST(request: Request) {
       reportType,
     });
 
-    // Index the photo in FR-API for cross-platform face matching (fire-and-forget).
-    if (body.photo && person.photoUrl) {
-      indexFace(person.id, name, body.lastSeen ?? "", body.photo).catch(() => {});
+    // Indexar la foto en el FR-API para cruces con otras plataformas.
+    // Usamos la URL pública de la foto (image_url) y enviamos source/name/location
+    // de forma asistiva: nunca bloquea el registro principal.
+    if (person.photoUrl) {
+      const origin = publicSiteOrigin(request);
+      const imageUrl = person.photoUrl.startsWith("/")
+        ? `${origin}${person.photoUrl}`
+        : person.photoUrl;
+      frIndexPerson({
+        externalId: person.id,
+        imageUrl,
+        name,
+        location: body.lastSeen ?? "",
+      }).catch(() => {});
     }
 
     return NextResponse.json({ person }, { status: 201 });

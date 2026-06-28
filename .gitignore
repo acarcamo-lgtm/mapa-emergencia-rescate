@@ -49,3 +49,10 @@ next-env.d.ts
 _*.mts
 
 .claude/commands/*
+
+# FR-API backfill local (no forman parte de la app ni del build)
+fr-backfill.mjs
+fr-doctor.py
+backfill.log
+backfill.err
+backfill.pid

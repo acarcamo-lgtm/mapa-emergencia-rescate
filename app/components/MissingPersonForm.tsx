@@ -8,15 +8,20 @@ export type MissingReportType = "missing" | "found";
 export type FoundPlace = "hospital" | "street";
 type PersonStatus = "safe" | "deceased";
 
-interface FrMatch {
+interface FrDuplicateCandidate {
   record_id: string;
   person_name: string | null;
-  age: number | string | null;
-  last_seen_location: string | null;
   image_url: string | null;
   score: number;
-  band: "alta" | "media" | "baja";
   source: string;
+}
+
+interface FrDuplicateResult {
+  possible_duplicate: boolean;
+  candidates?: FrDuplicateCandidate[];
+  no_face?: boolean;
+  disabled?: boolean;
+  error?: string;
 }
 
 export interface MissingPersonPayload {
@@ -226,21 +231,15 @@ export default function MissingPersonForm({
   const [submitting, setSubmitting] = useState(false);
   const [consent, setConsent] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [frMatches, setFrMatches] = useState<FrMatch[]>([]);
-  const [frSearching, setFrSearching] = useState(false);
-  const [frError, setFrError] = useState<string | null>(null);
-  const [frDuplicate, setFrDuplicate] = useState<{
-    possible_duplicate: boolean;
-    candidates?: Array<{
-      record_id: string;
-      person_name: string | null;
-      image_url: string | null;
-      score: number;
-      source: string;
-    }>;
-  } | null>(null);
+
+  // Estado del anti-duplicado facial (asistivo: nunca bloquea el envío).
+  const [frDuplicate, setFrDuplicate] = useState<FrDuplicateResult | null>(
+    null,
+  );
   const [frDupLoading, setFrDupLoading] = useState(false);
   const [frDupDismissed, setFrDupDismissed] = useState(false);
+  const [frNoFace, setFrNoFace] = useState(false);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const isMissing = reportType === "missing";
@@ -262,65 +261,46 @@ export default function MissingPersonForm({
     };
   }, [onCancel]);
 
-  useEffect(() => {
-    if (!photo) {
-      setFrMatches([]);
-      setFrError(null);
-      return;
-    }
-    let cancelled = false;
-    setFrSearching(true);
-    setFrError(null);
-    fetch("/api/fr/search", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ photo }),
-    })
-      .then((res) => {
-        if (!res.ok) return res.json().then((d) => { throw new Error(d.error || "Error en la búsqueda"); });
-        return res.json();
-      })
-      .then((data) => {
-        if (cancelled) return;
-        setFrMatches(data.results ?? []);
-        setFrSearching(false);
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        setFrError(err instanceof Error ? err.message : "No se pudo completar la búsqueda facial.");
-        setFrSearching(false);
-      });
-    return () => { cancelled = true; };
-  }, [photo]);
-
+  // ---------------------------------------------------------------------------
+  // Anti-duplicado facial al elegir foto
+  // ---------------------------------------------------------------------------
+  // La guía FR-API indica que el cliente público solo debe usar
+  // /api/fr/check-duplicate (dataUrl -> file). La búsqueda general (/v1/search)
+  // queda protegida para admin; por eso este formulario no la llama.
   useEffect(() => {
     if (!photo) {
       setFrDuplicate(null);
       setFrDupDismissed(false);
+      setFrNoFace(false);
       return;
     }
+
     let cancelled = false;
     setFrDupLoading(true);
     setFrDuplicate(null);
     setFrDupDismissed(false);
+    setFrNoFace(false);
+
     fetch("/api/fr/check-duplicate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ photo }),
     })
       .then((res) => res.json())
-      .then((data) => {
+      .then((data: FrDuplicateResult) => {
         if (cancelled) return;
-        if (data?.possible_duplicate && data.candidates?.length) {
-          setFrDuplicate(data);
-        }
+        setFrDuplicate(data);
+        if (data?.no_face) setFrNoFace(true);
         setFrDupLoading(false);
       })
       .catch(() => {
         if (cancelled) return;
         setFrDupLoading(false);
       });
-    return () => { cancelled = true; };
+
+    return () => {
+      cancelled = true;
+    };
   }, [photo]);
 
   const handleFile = useCallback(
@@ -332,10 +312,9 @@ export default function MissingPersonForm({
         return;
       }
       setError(null);
-      setFrMatches([]);
-      setFrError(null);
       setFrDuplicate(null);
       setFrDupDismissed(false);
+      setFrNoFace(false);
       setProcessing(true);
       try {
         setPhoto(await fileToResizedDataUrl(file));
@@ -564,65 +543,41 @@ export default function MissingPersonForm({
                 </span>
               </span>
             </button>
-            {(frSearching || frMatches.length > 0 || frError) && (
-              <div className="mt-3">
-                {frSearching && (
-                  <div className="flex items-center gap-2 rounded-xl border border-[var(--eborder)] bg-[var(--esurf2)] px-4 py-3 text-sm text-[var(--etext2)]">
-                    <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
-                      <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" className="opacity-25" />
-                      <path d="M4 12a8 8 0 018-8" stroke="currentColor" strokeWidth="3" strokeLinecap="round" className="opacity-75" />
-                    </svg>
-                    Buscando personas similares…
-                  </div>
-                )}
-                {frError && !frSearching && (
-                  <p className="text-xs text-[var(--etext2)]">{frError}</p>
-                )}
-                {frMatches.length > 0 && !frSearching && (
-                  <div className="flex flex-col gap-2">
-                    <p className="text-xs font-bold text-[var(--etext)]">
-                      <PeopleIcon className="mr-1 inline h-3.5 w-3.5 align-[-0.2em]" />
-                      {frMatches.length} {frMatches.length === 1 ? "posible coincidencia" : "posibles coincidencias"} encontrada{frMatches.length === 1 ? "" : "s"}
-                    </p>
-                    {frMatches.map((m) => (
-                      <a
-                        key={m.record_id}
-                        href={`#persona-${m.record_id}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex items-center gap-3 rounded-xl border border-[var(--eborder)] bg-white p-3 text-left transition hover:border-[var(--etext3)] hover:shadow-sm"
-                      >
-                        {m.image_url ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img
-                            src={m.image_url}
-                            alt={m.person_name || "Persona"}
-                            className="h-12 w-12 shrink-0 rounded-lg object-cover"
-                          />
-                        ) : (
-                          <span className="grid h-12 w-12 shrink-0 place-items-center rounded-lg bg-gray-100 text-[var(--etext2)]">
-                            <PeopleIcon className="h-5 w-5" />
-                          </span>
-                        )}
-                        <span className="flex min-w-0 flex-col gap-0.5">
-                          <span className="truncate text-sm font-bold text-[var(--etext)]">
-                            {m.person_name || "Sin nombre"}
-                          </span>
-                          <span className="text-xs text-[var(--etext2)]">
-                            {[m.age, m.last_seen_location].filter(Boolean).join(" · ") || "Datos no disponibles"}
-                          </span>
-                          <span className={`text-xs font-semibold ${
-                            m.band === "alta" ? "text-emerald-700" : m.band === "media" ? "text-amber-700" : "text-[var(--etext2)]"
-                          }`}>
-                            {Math.round(m.score * 100)}% similitud
-                          </span>
-                        </span>
-                      </a>
-                    ))}
-                  </div>
-                )}
+
+            {frDupLoading && (
+              <div className="mt-3 flex items-center gap-2 rounded-xl border border-[var(--eborder)] bg-[var(--esurf2)] px-4 py-3 text-sm text-[var(--etext2)]">
+                <svg
+                  className="h-4 w-4 animate-spin"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                >
+                  <circle
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    stroke="currentColor"
+                    strokeWidth="3"
+                    className="opacity-25"
+                  />
+                  <path
+                    d="M4 12a8 8 0 018-8"
+                    stroke="currentColor"
+                    strokeWidth="3"
+                    strokeLinecap="round"
+                    className="opacity-75"
+                  />
+                </svg>
+                Verificando si ya existe…
               </div>
             )}
+
+            {frNoFace && !frDupLoading && (
+              <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-[var(--etext2)]">
+                No se detectó un rostro claro en la foto. Puedes continuar, pero
+                la búsqueda por similitud no funcionará para esta imagen.
+              </div>
+            )}
+
             {frDuplicate?.possible_duplicate &&
               frDuplicate.candidates?.length &&
               !frDupDismissed && (
@@ -686,7 +641,10 @@ export default function MissingPersonForm({
 
           <div className="e-report-modal__grid grid grid-cols-1 gap-3.5 sm:grid-cols-2">
             <div>
-              <label htmlFor="report-name" className="e-report-modal__label mb-1.5 block text-[13px] font-bold text-[var(--etext)]">
+              <label
+                htmlFor="report-name"
+                className="e-report-modal__label mb-1.5 block text-[13px] font-bold text-[var(--etext)]"
+              >
                 Nombre y apellido <span className="text-red-600">*</span>
               </label>
               <input
@@ -701,7 +659,10 @@ export default function MissingPersonForm({
               />
             </div>
             <div>
-              <label htmlFor="report-age" className="e-report-modal__label mb-1.5 block text-[13px] font-bold text-[var(--etext)]">
+              <label
+                htmlFor="report-age"
+                className="e-report-modal__label mb-1.5 block text-[13px] font-bold text-[var(--etext)]"
+              >
                 Edad
               </label>
               <input
@@ -721,7 +682,10 @@ export default function MissingPersonForm({
           {isMissing ? (
             <div className="e-report-modal__grid grid grid-cols-1 gap-3.5 sm:grid-cols-2">
               <div>
-                <label htmlFor="report-location" className="e-report-modal__label mb-1.5 block text-[13px] font-bold text-[var(--etext)]">
+                <label
+                  htmlFor="report-location"
+                  className="e-report-modal__label mb-1.5 block text-[13px] font-bold text-[var(--etext)]"
+                >
                   Última ubicación vista{" "}
                   <span className="text-red-600">*</span>
                 </label>
@@ -737,7 +701,10 @@ export default function MissingPersonForm({
                 />
               </div>
               <div>
-                <label htmlFor="report-when" className="e-report-modal__label mb-1.5 block text-[13px] font-bold text-[var(--etext)]">
+                <label
+                  htmlFor="report-when"
+                  className="e-report-modal__label mb-1.5 block text-[13px] font-bold text-[var(--etext)]"
+                >
                   Desde cuándo sin contacto
                 </label>
                 <input
@@ -787,7 +754,10 @@ export default function MissingPersonForm({
               </fieldset>
 
               <div>
-                <label htmlFor="report-found-location" className="e-report-modal__label mb-1.5 block text-[13px] font-bold text-[var(--etext)]">
+                <label
+                  htmlFor="report-found-location"
+                  className="e-report-modal__label mb-1.5 block text-[13px] font-bold text-[var(--etext)]"
+                >
                   {foundPlace === "hospital"
                     ? "Nombre del hospital o clínica"
                     : "Zona o referencia"}{" "}
@@ -809,7 +779,10 @@ export default function MissingPersonForm({
               </div>
 
               <div>
-                <label htmlFor="report-found-when" className="e-report-modal__label mb-1.5 block text-[13px] font-bold text-[var(--etext)]">
+                <label
+                  htmlFor="report-found-when"
+                  className="e-report-modal__label mb-1.5 block text-[13px] font-bold text-[var(--etext)]"
+                >
                   Cuándo fue localizada
                 </label>
                 <input
@@ -859,7 +832,10 @@ export default function MissingPersonForm({
           )}
 
           <div>
-            <label htmlFor="report-desc" className="e-report-modal__label mb-1.5 block text-[13px] font-bold text-[var(--etext)]">
+            <label
+              htmlFor="report-desc"
+              className="e-report-modal__label mb-1.5 block text-[13px] font-bold text-[var(--etext)]"
+            >
               Descripción y señas particulares
             </label>
             <textarea
@@ -874,7 +850,10 @@ export default function MissingPersonForm({
           </div>
 
           <div className="e-report-modal__contact rounded-xl bg-[#eef2f7] p-4">
-            <label htmlFor="report-contact" className="e-report-modal__label mb-1.5 block text-[13px] font-bold text-[var(--etext)]">
+            <label
+              htmlFor="report-contact"
+              className="e-report-modal__label mb-1.5 block text-[13px] font-bold text-[var(--etext)]"
+            >
               ¿Cómo te contactan si alguien la reconoce?
             </label>
             <input
