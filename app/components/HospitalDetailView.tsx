@@ -4,10 +4,16 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   buildHospitalSlug,
+  HOSPITAL_SUPPLY_CATEGORY_META,
+  HOSPITAL_SUPPLY_NEED_STATUS_META,
+  HOSPITAL_SUPPLY_STATUS_META,
   PATIENT_CONDITION_META,
   PATIENT_STATUS_META,
   type Hospital,
   type HospitalPatient,
+  type PublicHospitalSupplyNeed,
+  type PublicHospitalSupplyStatus,
+  type PublicHospitalSupplySummary,
 } from "@/lib/hospitals-meta";
 import { timeAgo } from "@/lib/format";
 
@@ -17,14 +23,19 @@ const POLL_MS = 30_000;
 interface Props {
   hospital: Hospital;
   initialPatients: HospitalPatient[];
+  initialSupply?: PublicHospitalSupplySummary;
 }
 
 export default function HospitalDetailView({
   hospital: initialHospital,
   initialPatients,
+  initialSupply,
 }: Props) {
   const [hospital, setHospital] = useState<Hospital>(initialHospital);
   const [patients, setPatients] = useState<HospitalPatient[]>(initialPatients);
+  const [supply, setSupply] = useState<PublicHospitalSupplySummary | null>(
+    initialSupply ?? initialHospital.supplySummary ?? null,
+  );
   const [search, setSearch] = useState("");
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -46,14 +57,22 @@ export default function HospitalDetailView({
   const load = useCallback(async (manual = false) => {
     if (manual) setRefreshing(true);
     try {
-      const res = await fetch(
-        `/api/hospitals/${hospitalIdRef.current}/patients`,
-        { cache: "no-store" },
-      );
+      const [res, supplyRes] = await Promise.all([
+        fetch(`/api/hospitals/${hospitalIdRef.current}/patients`, {
+          cache: "no-store",
+        }),
+        fetch(`/api/hospitals/${hospitalIdRef.current}/supplies`, {
+          cache: "no-store",
+        }),
+      ]);
       if (!res.ok) throw new Error("No se pudieron cargar los pacientes.");
       const data = await res.json();
       setPatients(data.patients ?? []);
       if (data.hospital) setHospital(data.hospital);
+      if (supplyRes.ok) {
+        const supplyData = await supplyRes.json();
+        setSupply(supplyData.supply ?? null);
+      }
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error al cargar.");
@@ -100,6 +119,9 @@ export default function HospitalDetailView({
   const active = patients.filter((p) => p.status === "hospitalized").length;
 
   return (
+    <div className="space-y-4">
+      <HospitalSupplyPanel supply={supply} now={now} />
+
     <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-5 py-3">
         <div className="flex items-center gap-3">
@@ -222,6 +244,172 @@ export default function HospitalDetailView({
         />
       )}
     </div>
+    </div>
+  );
+}
+
+function HospitalSupplyPanel({
+  supply,
+  now,
+}: {
+  supply: PublicHospitalSupplySummary | null;
+  now: number;
+}) {
+  const statuses = supply?.statuses ?? [];
+  const activeNeeds = supply?.activeNeeds ?? [];
+
+  return (
+    <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-100 pb-3">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">
+            Insumos hospitalarios
+          </p>
+          <h2 className="mt-1 text-lg font-bold text-slate-900">
+            Estado por categoría
+          </h2>
+          <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-600">
+            Datos operativos reportados por POC/admin. No incluye contactos
+            privados ni notas restringidas.
+          </p>
+        </div>
+        <Link
+          href="/admin"
+          className="inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-800 transition hover:bg-slate-50"
+        >
+          Actualizar
+        </Link>
+      </div>
+
+      {statuses.length === 0 && activeNeeds.length === 0 ? (
+        <div className="mt-4 rounded-xl border border-dashed border-slate-200 bg-slate-50 px-5 py-8 text-center">
+          <p className="text-sm font-semibold text-slate-700">
+            Sin reporte de insumos confirmado todavía.
+          </p>
+          <p className="mt-1 text-xs text-slate-500">
+            Coordinación puede actualizar el semáforo desde el panel restringido.
+          </p>
+        </div>
+      ) : (
+        <>
+          {statuses.length > 0 && (
+            <div className="mt-4 grid gap-2 sm:grid-cols-2">
+              {statuses.map((status) => (
+                <SupplyStatusCard key={status.category} status={status} />
+              ))}
+            </div>
+          )}
+
+          <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50/70 p-3 text-xs leading-5 text-amber-950">
+            Prioriza exactamente lo pedido por el hospital. Evita donar comida
+            genérica si el reporte solicita alimentos blandos/digeribles,
+            medicamentos o líquidos IV específicos.
+          </div>
+
+          <div className="mt-5">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h3 className="text-sm font-bold text-slate-900">
+                Necesidades activas
+              </h3>
+              {supply?.lastConfirmedAt && (
+                <span className="text-xs text-slate-500">
+                  Última confirmación {timeAgo(supply.lastConfirmedAt, now)}
+                </span>
+              )}
+            </div>
+            {activeNeeds.length === 0 ? (
+              <p className="mt-2 rounded-xl border border-slate-100 bg-slate-50 p-3 text-sm text-slate-500">
+                No hay necesidades itemizadas activas publicadas.
+              </p>
+            ) : (
+              <ul className="mt-2 grid gap-2">
+                {activeNeeds.map((need) => (
+                  <SupplyNeedItem key={need.id} need={need} />
+                ))}
+              </ul>
+            )}
+          </div>
+        </>
+      )}
+    </section>
+  );
+}
+
+function SupplyStatusCard({ status }: { status: PublicHospitalSupplyStatus }) {
+  const meta = HOSPITAL_SUPPLY_STATUS_META[status.status];
+  const category = HOSPITAL_SUPPLY_CATEGORY_META[status.category];
+  return (
+    <article
+      className={`rounded-xl border p-3 ${
+        status.freshness.isStale
+          ? "border-amber-200 bg-amber-50"
+          : "border-slate-200 bg-white"
+      }`}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-sm font-bold text-slate-900">{category.label}</p>
+          <p className="mt-0.5 text-xs text-slate-500">
+            Confirmado {status.freshness.confirmedAgo}
+          </p>
+        </div>
+        <span
+          className="inline-flex shrink-0 items-center rounded-full px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-white"
+          style={{ background: meta.color }}
+        >
+          {meta.label}
+        </span>
+      </div>
+      {status.publicNote && (
+        <p className="mt-2 text-xs leading-5 text-slate-600">
+          {status.publicNote}
+        </p>
+      )}
+      {status.freshness.isStale && (
+        <p className="mt-2 text-[11px] font-semibold text-amber-800">
+          Requiere reconfirmación.
+        </p>
+      )}
+    </article>
+  );
+}
+
+function SupplyNeedItem({ need }: { need: PublicHospitalSupplyNeed }) {
+  const urgency = HOSPITAL_SUPPLY_STATUS_META[need.urgency];
+  const status = HOSPITAL_SUPPLY_NEED_STATUS_META[need.status];
+  const quantity =
+    need.quantity !== null
+      ? `${need.quantity.toLocaleString("es-VE")}${need.unit ? ` ${need.unit}` : ""}`
+      : need.unit || "Cantidad por confirmar";
+
+  return (
+    <li className="rounded-xl border border-slate-200 bg-white p-3">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div className="min-w-0">
+          <p className="text-sm font-bold text-slate-900">{need.itemType}</p>
+          <p className="mt-0.5 text-xs text-slate-500">
+            {need.categoryLabel} · {quantity} · {need.updatedAgo}
+          </p>
+        </div>
+        <div className="flex shrink-0 flex-wrap gap-1">
+          <span
+            className="rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white"
+            style={{ background: urgency.color }}
+          >
+            {urgency.label}
+          </span>
+          <span
+            className="rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white"
+            style={{ background: status.color }}
+          >
+            {status.label}
+          </span>
+        </div>
+      </div>
+      {need.publicNote && (
+        <p className="mt-2 text-xs leading-5 text-slate-600">{need.publicNote}</p>
+      )}
+    </li>
   );
 }
 

@@ -1,5 +1,6 @@
 import { eq, sql } from "drizzle-orm";
 import { getDb, hasDbEnv, schema } from "./drizzle";
+import { getPublicSupplySummariesForHospitals } from "./hospital-supplies";
 import hospitalsSeed from "./data/hospitals-seed.json";
 import {
   HOSPITAL_FACILITY_TYPES,
@@ -86,6 +87,17 @@ function rowToHospital(row: HospitalRow): Hospital {
     totalPatients: Number(row.totalPatients ?? 0),
     createdAt: Number(row.createdAt),
   };
+}
+
+async function withSupplySummaries(hospitalsList: Hospital[]): Promise<Hospital[]> {
+  if (hospitalsList.length === 0) return hospitalsList;
+  const summaries = await getPublicSupplySummariesForHospitals(
+    hospitalsList.map((h) => h.id),
+  );
+  return hospitalsList.map((hospital) => ({
+    ...hospital,
+    supplySummary: summaries.get(hospital.id),
+  }));
 }
 
 function normalizeFacilityType(v: string | null | undefined): HospitalFacilityType {
@@ -196,7 +208,7 @@ export async function listHospitals(
       LIMIT ${limit}
     `);
     const rows = (Array.isArray(result) ? result : result.rows) as HospitalRow[];
-    return rows.map(rowToHospital);
+    return withSupplySummaries(rows.map(rowToHospital));
   }
 
   ensureMemorySeed();
@@ -235,7 +247,7 @@ export async function listHospitals(
     if (a.state !== b.state) return a.state.localeCompare(b.state);
     return a.name.localeCompare(b.name);
   });
-  return list.slice(0, limit);
+  return withSupplySummaries(list.slice(0, limit));
 }
 
 export async function listStates(): Promise<string[]> {
@@ -273,7 +285,7 @@ export async function getHospital(id: string): Promise<Hospital | null> {
       GROUP BY h.id
     `);
     const rows = (Array.isArray(result) ? result : result.rows) as HospitalRow[];
-    if (rows[0]) return rowToHospital(rows[0]);
+    if (rows[0]) return (await withSupplySummaries([rowToHospital(rows[0])]))[0];
 
     const hospitalsList = await listHospitals({ limit: 1000 });
     return hospitalsList.find((h) => matchesHospitalSlug(h, id)) ?? null;
@@ -288,11 +300,12 @@ export async function getHospital(id: string): Promise<Hospital | null> {
     return getHospital(match.id);
   }
   const patients = [...memoryPatients.values()].filter((p) => p.hospitalId === id);
-  return {
+  const hospital = {
     ...h,
     activePatients: patients.filter((p) => p.status === "hospitalized").length,
     totalPatients: patients.length,
   };
+  return (await withSupplySummaries([hospital]))[0];
 }
 
 export async function addHospital(input: NewHospital): Promise<Hospital> {

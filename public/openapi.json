@@ -19,6 +19,10 @@
       "description": "Hospitales y pacientes"
     },
     {
+      "name": "admin",
+      "description": "Superficie restringida de administración"
+    },
+    {
       "name": "donations",
       "description": "Donaciones"
     },
@@ -242,6 +246,10 @@
           },
           "createdAt": {
             "type": "integer"
+          },
+          "supplySummary": {
+            "nullable": true,
+            "$ref": "#/components/schemas/HospitalSupplySummary"
           }
         }
       },
@@ -278,6 +286,470 @@
           },
           "updatedAt": {
             "type": "integer"
+          }
+        }
+      },
+      "HospitalSupplyFreshness": {
+        "type": "object",
+        "properties": {
+          "lastUpdatedAt": {
+            "type": "integer",
+            "description": "epoch-ms"
+          },
+          "lastConfirmedAt": {
+            "type": "integer",
+            "description": "epoch-ms"
+          },
+          "staleAfterHours": {
+            "type": "integer"
+          },
+          "isStale": {
+            "type": "boolean"
+          },
+          "updatedAgo": {
+            "type": "string"
+          },
+          "confirmedAgo": {
+            "type": "string"
+          }
+        }
+      },
+      "HospitalSupplyCategory": {
+        "type": "string",
+        "enum": [
+          "medications",
+          "iv_fluids",
+          "medical_supplies",
+          "soft_foods",
+          "water",
+          "beds_capacity",
+          "lab_diagnostics",
+          "transport",
+          "other"
+        ]
+      },
+      "HospitalSupplySemaphore": {
+        "type": "string",
+        "enum": [
+          "green",
+          "yellow",
+          "red",
+          "unknown"
+        ]
+      },
+      "HospitalSupplyCategoryStatus": {
+        "type": "object",
+        "properties": {
+          "category": {
+            "$ref": "#/components/schemas/HospitalSupplyCategory"
+          },
+          "status": {
+            "$ref": "#/components/schemas/HospitalSupplySemaphore"
+          },
+          "label": {
+            "type": "string"
+          },
+          "publicNote": {
+            "type": "string"
+          },
+          "freshness": {
+            "$ref": "#/components/schemas/HospitalSupplyFreshness"
+          }
+        }
+      },
+      "HospitalSupplyStatus": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/HospitalSupplyCategoryStatus"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "hospitalId": {
+                "type": "string"
+              },
+              "restrictedNote": {
+                "type": "string"
+              },
+              "updatedBy": {
+                "type": "string"
+              },
+              "source": {
+                "type": "string"
+              }
+            }
+          }
+        ]
+      },
+      "HospitalSupplyNeed": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "hospitalId": {
+            "type": "string"
+          },
+          "category": {
+            "$ref": "#/components/schemas/HospitalSupplyCategory"
+          },
+          "categoryLabel": {
+            "type": "string"
+          },
+          "itemType": {
+            "type": "string"
+          },
+          "quantity": {
+            "type": "integer",
+            "nullable": true
+          },
+          "unit": {
+            "type": "string"
+          },
+          "urgency": {
+            "$ref": "#/components/schemas/HospitalSupplySemaphore"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "active",
+              "partially_covered",
+              "covered",
+              "cancelled",
+              "needs_verification"
+            ]
+          },
+          "publicNote": {
+            "type": "string"
+          },
+          "lastConfirmedAt": {
+            "type": "integer"
+          },
+          "updatedAt": {
+            "type": "integer"
+          },
+          "updatedAgo": {
+            "type": "string"
+          }
+        }
+      },
+      "HospitalSupplyNeedRestricted": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/HospitalSupplyNeed"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "restrictedNote": {
+                "type": "string"
+              },
+              "updatedBy": {
+                "type": "string"
+              },
+              "source": {
+                "type": "string"
+              },
+              "createdAt": {
+                "type": "integer"
+              }
+            }
+          }
+        ]
+      },
+      "HospitalSupplySummary": {
+        "type": "object",
+        "properties": {
+          "statuses": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/HospitalSupplyCategoryStatus"
+            }
+          },
+          "activeNeeds": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/HospitalSupplyNeed"
+            }
+          },
+          "counts": {
+            "type": "object",
+            "properties": {
+              "red": {
+                "type": "integer"
+              },
+              "yellow": {
+                "type": "integer"
+              },
+              "stale": {
+                "type": "integer"
+              },
+              "activeNeeds": {
+                "type": "integer"
+              }
+            }
+          },
+          "worstStatus": {
+            "$ref": "#/components/schemas/HospitalSupplySemaphore"
+          },
+          "lastConfirmedAt": {
+            "type": "integer",
+            "nullable": true
+          }
+        }
+      },
+      "HospitalSupplyStatusUpdateInput": {
+        "type": "object",
+        "required": [
+          "category"
+        ],
+        "properties": {
+          "category": {
+            "$ref": "#/components/schemas/HospitalSupplyCategory"
+          },
+          "status": {
+            "$ref": "#/components/schemas/HospitalSupplySemaphore"
+          },
+          "publicNote": {
+            "type": "string"
+          },
+          "restrictedNote": {
+            "type": "string"
+          },
+          "staleAfterHours": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 168
+          },
+          "updatedBy": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "confirmOnly": {
+            "type": "boolean",
+            "description": "true para renovar frescura sin cambiar el semáforo."
+          }
+        }
+      },
+      "HospitalSupplyNeedInput": {
+        "type": "object",
+        "required": [
+          "category",
+          "itemType"
+        ],
+        "properties": {
+          "category": {
+            "$ref": "#/components/schemas/HospitalSupplyCategory"
+          },
+          "itemType": {
+            "type": "string"
+          },
+          "quantity": {
+            "type": "integer",
+            "nullable": true
+          },
+          "unit": {
+            "type": "string"
+          },
+          "urgency": {
+            "$ref": "#/components/schemas/HospitalSupplySemaphore"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "active",
+              "partially_covered",
+              "covered",
+              "cancelled",
+              "needs_verification"
+            ]
+          },
+          "publicNote": {
+            "type": "string"
+          },
+          "restrictedNote": {
+            "type": "string"
+          },
+          "updatedBy": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          }
+        }
+      },
+      "HospitalSupplyNeedPatchInput": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "active",
+              "partially_covered",
+              "covered",
+              "cancelled",
+              "needs_verification"
+            ]
+          },
+          "publicNote": {
+            "type": "string"
+          },
+          "restrictedNote": {
+            "type": "string"
+          },
+          "updatedBy": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          }
+        }
+      },
+      "HospitalSupplyHelpRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "hospitalId": {
+            "type": "string"
+          },
+          "category": {
+            "$ref": "#/components/schemas/HospitalSupplyCategory"
+          },
+          "categoryLabel": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "urgency": {
+            "$ref": "#/components/schemas/HospitalSupplySemaphore"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "open",
+              "contacting",
+              "resolved",
+              "closed"
+            ]
+          },
+          "requestedBy": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "restrictedNote": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "integer"
+          },
+          "updatedAt": {
+            "type": "integer"
+          },
+          "updatedAgo": {
+            "type": "string"
+          }
+        }
+      },
+      "HospitalSupplyHelpRequestInput": {
+        "type": "object",
+        "required": [
+          "category",
+          "message"
+        ],
+        "properties": {
+          "category": {
+            "$ref": "#/components/schemas/HospitalSupplyCategory"
+          },
+          "message": {
+            "type": "string"
+          },
+          "urgency": {
+            "$ref": "#/components/schemas/HospitalSupplySemaphore"
+          },
+          "requestedBy": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "restrictedNote": {
+            "type": "string"
+          }
+        }
+      },
+      "HospitalSupplyHelpPatchInput": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "open",
+              "contacting",
+              "resolved",
+              "closed"
+            ]
+          },
+          "restrictedNote": {
+            "type": "string"
+          },
+          "requestedBy": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          }
+        }
+      },
+      "AdminHospitalSupplyRow": {
+        "type": "object",
+        "properties": {
+          "hospital": {
+            "$ref": "#/components/schemas/Hospital"
+          },
+          "supply": {
+            "type": "object",
+            "properties": {
+              "hospitalId": {
+                "type": "string"
+              },
+              "summary": {
+                "$ref": "#/components/schemas/HospitalSupplySummary"
+              },
+              "statuses": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/HospitalSupplyStatus"
+                }
+              },
+              "activeNeeds": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/HospitalSupplyNeedRestricted"
+                }
+              },
+              "helpRequests": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/HospitalSupplyHelpRequest"
+                }
+              },
+              "pocs": {
+                "type": "array",
+                "items": {
+                  "type": "object"
+                }
+              }
+            }
           }
         }
       },
@@ -662,6 +1134,81 @@
           },
           "503": {
             "description": "No se pudieron cargar las donaciones",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/hospital-supplies": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Superficie operativa de insumos hospitalarios (requiere admin)",
+        "responses": {
+          "200": {
+            "description": "Hospitales con estados, necesidades, POCs y solicitudes restringidas",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "generatedAt": {
+                      "type": "integer",
+                      "description": "epoch-ms"
+                    },
+                    "stats": {
+                      "type": "object",
+                      "properties": {
+                        "hospitals": {
+                          "type": "integer"
+                        },
+                        "redCategories": {
+                          "type": "integer"
+                        },
+                        "yellowCategories": {
+                          "type": "integer"
+                        },
+                        "staleCategories": {
+                          "type": "integer"
+                        },
+                        "activeNeeds": {
+                          "type": "integer"
+                        },
+                        "helpOpen": {
+                          "type": "integer"
+                        }
+                      }
+                    },
+                    "hospitals": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/AdminHospitalSupplyRow"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autorizado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "No se pudo cargar la superficie de insumos",
             "content": {
               "application/json": {
                 "schema": {
@@ -1511,6 +2058,500 @@
           },
           "404": {
             "description": "Hospital no encontrado.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/hospitals/{id}/supplies/help/{requestId}": {
+      "patch": {
+        "tags": [
+          "hospitals"
+        ],
+        "summary": "Actualiza una solicitud restringida de ayuda de insumos (requiere admin/POC)",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "requestId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HospitalSupplyHelpPatchInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Solicitud actualizada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "request": {
+                      "$ref": "#/components/schemas/HospitalSupplyHelpRequest"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autorizado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Hospital o solicitud no encontrada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "No se pudo actualizar la solicitud",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/hospitals/{id}/supplies/help": {
+      "post": {
+        "tags": [
+          "hospitals"
+        ],
+        "summary": "Crea una solicitud restringida de ayuda para actualizar insumos (requiere admin/POC)",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HospitalSupplyHelpRequestInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Solicitud creada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "request": {
+                      "$ref": "#/components/schemas/HospitalSupplyHelpRequest"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autorizado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Hospital no encontrado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "No se pudo guardar la solicitud",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/hospitals/{id}/supplies/needs/{needId}": {
+      "patch": {
+        "tags": [
+          "hospitals"
+        ],
+        "summary": "Actualiza el estado operativo de una necesidad específica (requiere admin/POC)",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "needId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HospitalSupplyNeedPatchInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Necesidad actualizada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "need": {
+                      "$ref": "#/components/schemas/HospitalSupplyNeedRestricted"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autorizado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Hospital o necesidad no encontrada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "No se pudo actualizar la necesidad",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/hospitals/{id}/supplies/needs": {
+      "post": {
+        "tags": [
+          "hospitals"
+        ],
+        "summary": "Crea una necesidad específica de insumos para un hospital (requiere admin/POC)",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HospitalSupplyNeedInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Necesidad creada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "need": {
+                      "$ref": "#/components/schemas/HospitalSupplyNeedRestricted"
+                    },
+                    "supply": {
+                      "$ref": "#/components/schemas/HospitalSupplySummary"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autorizado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Hospital no encontrado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "No se pudo guardar la necesidad",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/hospitals/{id}/supplies": {
+      "get": {
+        "tags": [
+          "hospitals"
+        ],
+        "summary": "Lee el estado público seguro de insumos de un hospital",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Id o slug del hospital."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Estado de insumos público, sin contacto POC ni notas restringidas",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "hospital": {
+                      "$ref": "#/components/schemas/Hospital"
+                    },
+                    "supply": {
+                      "$ref": "#/components/schemas/HospitalSupplySummary"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Hospital no encontrado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "hospitals"
+        ],
+        "summary": "Actualiza o confirma el semáforo de una categoría de insumos (requiere admin/POC)",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HospitalSupplyStatusUpdateInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Categoría actualizada o confirmada sin cambios",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "$ref": "#/components/schemas/HospitalSupplyStatus"
+                    },
+                    "supply": {
+                      "$ref": "#/components/schemas/HospitalSupplySummary"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autorizado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Hospital no encontrado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "No se pudo guardar el estado",
             "content": {
               "application/json": {
                 "schema": {

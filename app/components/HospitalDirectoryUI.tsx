@@ -3,9 +3,11 @@
 import Link from "next/link";
 import {
   FACILITY_TYPE_META,
+  HOSPITAL_SUPPLY_STATUS_META,
   PRIORITY_ZONE_META,
   type Hospital,
   type HospitalPriorityZone,
+  type PublicHospitalSupplySummary,
 } from "@/lib/hospitals-meta";
 
 export const HOSPITAL_ZONE_FILTERS: {
@@ -166,6 +168,10 @@ export function HospitalCard({
         <p className="e-hospital-card__address">📍 {hospital.address}</p>
       )}
 
+      {hospital.supplySummary && (
+        <HospitalSupplySummaryStrip summary={hospital.supplySummary} />
+      )}
+
       <div className="e-hospital-card__footer">
         <span className="e-hospital-card__beds">
           <span aria-hidden>🛏️</span>
@@ -192,5 +198,54 @@ export function HospitalCard({
     <button type="button" onClick={onOpen} className={className} style={style}>
       {content}
     </button>
+  );
+}
+
+function HospitalSupplySummaryStrip({
+  summary,
+}: {
+  summary: PublicHospitalSupplySummary;
+}) {
+  const urgentStatuses = summary.statuses
+    .filter((status) => status.status === "red" || status.status === "yellow")
+    .slice(0, 3);
+  const staleCount = summary.counts.stale;
+  const activeNeeds = summary.counts.activeNeeds;
+
+  if (urgentStatuses.length === 0 && staleCount === 0 && activeNeeds === 0) {
+    return null;
+  }
+
+  return (
+    <div className="e-hospital-card__supply" aria-label="Resumen de insumos">
+      <div className="e-hospital-card__supply-tags">
+        {urgentStatuses.map((status) => (
+          <span
+            key={status.category}
+            className="e-hospital-card__supply-tag"
+            style={{ color: HOSPITAL_SUPPLY_STATUS_META[status.status].color }}
+          >
+            <span
+              className="e-hospital-card__supply-dot"
+              style={{
+                background: HOSPITAL_SUPPLY_STATUS_META[status.status].color,
+              }}
+              aria-hidden
+            />
+            {status.label}
+          </span>
+        ))}
+        {activeNeeds > 0 && (
+          <span className="e-hospital-card__supply-tag">
+            {activeNeeds} necesidad{activeNeeds === 1 ? "" : "es"}
+          </span>
+        )}
+        {staleCount > 0 && (
+          <span className="e-hospital-card__supply-tag is-stale">
+            {staleCount} stale
+          </span>
+        )}
+      </div>
+    </div>
   );
 }

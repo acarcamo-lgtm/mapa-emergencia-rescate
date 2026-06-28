@@ -29,6 +29,7 @@ export function buildOpenApiSpec(): Record<string, unknown> {
         { name: "reports", description: "Reportes de emergencia en el mapa" },
         { name: "missing", description: "Personas desaparecidas / localizadas" },
         { name: "hospitals", description: "Hospitales y pacientes" },
+        { name: "admin", description: "Superficie restringida de administración" },
         { name: "donations", description: "Donaciones" },
         { name: "chat", description: "Chat ciudadano" },
         { name: "sync", description: "Sincronización de fuentes externas" },
@@ -124,6 +125,10 @@ const SCHEMAS = {
       activePatients: { type: "integer" },
       totalPatients: { type: "integer" },
       createdAt: { type: "integer" },
+      supplySummary: {
+        nullable: true,
+        $ref: "#/components/schemas/HospitalSupplySummary",
+      },
     },
   },
   HospitalPatient: {
@@ -139,6 +144,257 @@ const SCHEMAS = {
       contact: { type: "string" },
       admittedAt: { type: "integer" },
       updatedAt: { type: "integer" },
+    },
+  },
+  HospitalSupplyFreshness: {
+    type: "object",
+    properties: {
+      lastUpdatedAt: { type: "integer", description: "epoch-ms" },
+      lastConfirmedAt: { type: "integer", description: "epoch-ms" },
+      staleAfterHours: { type: "integer" },
+      isStale: { type: "boolean" },
+      updatedAgo: { type: "string" },
+      confirmedAgo: { type: "string" },
+    },
+  },
+  HospitalSupplyCategory: {
+    type: "string",
+    enum: [
+      "medications",
+      "iv_fluids",
+      "medical_supplies",
+      "soft_foods",
+      "water",
+      "beds_capacity",
+      "lab_diagnostics",
+      "transport",
+      "other",
+    ],
+  },
+  HospitalSupplySemaphore: {
+    type: "string",
+    enum: ["green", "yellow", "red", "unknown"],
+  },
+  HospitalSupplyCategoryStatus: {
+    type: "object",
+    properties: {
+      category: { $ref: "#/components/schemas/HospitalSupplyCategory" },
+      status: { $ref: "#/components/schemas/HospitalSupplySemaphore" },
+      label: { type: "string" },
+      publicNote: { type: "string" },
+      freshness: { $ref: "#/components/schemas/HospitalSupplyFreshness" },
+    },
+  },
+  HospitalSupplyStatus: {
+    allOf: [
+      { $ref: "#/components/schemas/HospitalSupplyCategoryStatus" },
+      {
+        type: "object",
+        properties: {
+          id: { type: "string" },
+          hospitalId: { type: "string" },
+          restrictedNote: { type: "string" },
+          updatedBy: { type: "string" },
+          source: { type: "string" },
+        },
+      },
+    ],
+  },
+  HospitalSupplyNeed: {
+    type: "object",
+    properties: {
+      id: { type: "string" },
+      hospitalId: { type: "string" },
+      category: { $ref: "#/components/schemas/HospitalSupplyCategory" },
+      categoryLabel: { type: "string" },
+      itemType: { type: "string" },
+      quantity: { type: "integer", nullable: true },
+      unit: { type: "string" },
+      urgency: { $ref: "#/components/schemas/HospitalSupplySemaphore" },
+      status: {
+        type: "string",
+        enum: [
+          "active",
+          "partially_covered",
+          "covered",
+          "cancelled",
+          "needs_verification",
+        ],
+      },
+      publicNote: { type: "string" },
+      lastConfirmedAt: { type: "integer" },
+      updatedAt: { type: "integer" },
+      updatedAgo: { type: "string" },
+    },
+  },
+  HospitalSupplyNeedRestricted: {
+    allOf: [
+      { $ref: "#/components/schemas/HospitalSupplyNeed" },
+      {
+        type: "object",
+        properties: {
+          restrictedNote: { type: "string" },
+          updatedBy: { type: "string" },
+          source: { type: "string" },
+          createdAt: { type: "integer" },
+        },
+      },
+    ],
+  },
+  HospitalSupplySummary: {
+    type: "object",
+    properties: {
+      statuses: {
+        type: "array",
+        items: { $ref: "#/components/schemas/HospitalSupplyCategoryStatus" },
+      },
+      activeNeeds: {
+        type: "array",
+        items: { $ref: "#/components/schemas/HospitalSupplyNeed" },
+      },
+      counts: {
+        type: "object",
+        properties: {
+          red: { type: "integer" },
+          yellow: { type: "integer" },
+          stale: { type: "integer" },
+          activeNeeds: { type: "integer" },
+        },
+      },
+      worstStatus: { $ref: "#/components/schemas/HospitalSupplySemaphore" },
+      lastConfirmedAt: { type: "integer", nullable: true },
+    },
+  },
+  HospitalSupplyStatusUpdateInput: {
+    type: "object",
+    required: ["category"],
+    properties: {
+      category: { $ref: "#/components/schemas/HospitalSupplyCategory" },
+      status: { $ref: "#/components/schemas/HospitalSupplySemaphore" },
+      publicNote: { type: "string" },
+      restrictedNote: { type: "string" },
+      staleAfterHours: { type: "integer", minimum: 1, maximum: 168 },
+      updatedBy: { type: "string" },
+      source: { type: "string" },
+      confirmOnly: {
+        type: "boolean",
+        description: "true para renovar frescura sin cambiar el semáforo.",
+      },
+    },
+  },
+  HospitalSupplyNeedInput: {
+    type: "object",
+    required: ["category", "itemType"],
+    properties: {
+      category: { $ref: "#/components/schemas/HospitalSupplyCategory" },
+      itemType: { type: "string" },
+      quantity: { type: "integer", nullable: true },
+      unit: { type: "string" },
+      urgency: { $ref: "#/components/schemas/HospitalSupplySemaphore" },
+      status: {
+        type: "string",
+        enum: [
+          "active",
+          "partially_covered",
+          "covered",
+          "cancelled",
+          "needs_verification",
+        ],
+      },
+      publicNote: { type: "string" },
+      restrictedNote: { type: "string" },
+      updatedBy: { type: "string" },
+      source: { type: "string" },
+    },
+  },
+  HospitalSupplyNeedPatchInput: {
+    type: "object",
+    properties: {
+      status: {
+        type: "string",
+        enum: [
+          "active",
+          "partially_covered",
+          "covered",
+          "cancelled",
+          "needs_verification",
+        ],
+      },
+      publicNote: { type: "string" },
+      restrictedNote: { type: "string" },
+      updatedBy: { type: "string" },
+      source: { type: "string" },
+    },
+  },
+  HospitalSupplyHelpRequest: {
+    type: "object",
+    properties: {
+      id: { type: "string" },
+      hospitalId: { type: "string" },
+      category: { $ref: "#/components/schemas/HospitalSupplyCategory" },
+      categoryLabel: { type: "string" },
+      message: { type: "string" },
+      urgency: { $ref: "#/components/schemas/HospitalSupplySemaphore" },
+      status: {
+        type: "string",
+        enum: ["open", "contacting", "resolved", "closed"],
+      },
+      requestedBy: { type: "string" },
+      source: { type: "string" },
+      restrictedNote: { type: "string" },
+      createdAt: { type: "integer" },
+      updatedAt: { type: "integer" },
+      updatedAgo: { type: "string" },
+    },
+  },
+  HospitalSupplyHelpRequestInput: {
+    type: "object",
+    required: ["category", "message"],
+    properties: {
+      category: { $ref: "#/components/schemas/HospitalSupplyCategory" },
+      message: { type: "string" },
+      urgency: { $ref: "#/components/schemas/HospitalSupplySemaphore" },
+      requestedBy: { type: "string" },
+      source: { type: "string" },
+      restrictedNote: { type: "string" },
+    },
+  },
+  HospitalSupplyHelpPatchInput: {
+    type: "object",
+    properties: {
+      status: {
+        type: "string",
+        enum: ["open", "contacting", "resolved", "closed"],
+      },
+      restrictedNote: { type: "string" },
+      requestedBy: { type: "string" },
+      source: { type: "string" },
+    },
+  },
+  AdminHospitalSupplyRow: {
+    type: "object",
+    properties: {
+      hospital: { $ref: "#/components/schemas/Hospital" },
+      supply: {
+        type: "object",
+        properties: {
+          hospitalId: { type: "string" },
+          summary: { $ref: "#/components/schemas/HospitalSupplySummary" },
+          statuses: {
+            type: "array",
+            items: { $ref: "#/components/schemas/HospitalSupplyStatus" },
+          },
+          activeNeeds: {
+            type: "array",
+            items: { $ref: "#/components/schemas/HospitalSupplyNeedRestricted" },
+          },
+          helpRequests: {
+            type: "array",
+            items: { $ref: "#/components/schemas/HospitalSupplyHelpRequest" },
+          },
+          pocs: { type: "array", items: { type: "object" } },
+        },
+      },
     },
   },
   Donation: {

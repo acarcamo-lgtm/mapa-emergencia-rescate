@@ -991,6 +991,40 @@ a:focus-visible,
   line-clamp: 2;
 }
 
+.e-hospital-card__supply {
+  border-top: 1px solid var(--eborder);
+  padding-top: 0.625rem;
+}
+
+.e-hospital-card__supply-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+}
+
+.e-hospital-card__supply-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  border-radius: var(--qi-radius-pill);
+  background: var(--einput);
+  padding: 0.2rem 0.5rem;
+  font-size: 10px;
+  font-weight: 800;
+  color: var(--etext2);
+}
+
+.e-hospital-card__supply-tag.is-stale {
+  color: #78350f;
+  background: #f8f0e0;
+}
+
+.e-hospital-card__supply-dot {
+  width: 0.45rem;
+  height: 0.45rem;
+  border-radius: 999px;
+}
+
 .e-hospital-card__footer {
   display: flex;
   align-items: center;

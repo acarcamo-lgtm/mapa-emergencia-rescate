@@ -186,6 +186,142 @@ export const hospitalPatients = pgTable(
   ],
 );
 
+/* ------------------------------------------------------- hospital_supplies */
+export const hospitalSupplyStatuses = pgTable(
+  "hospital_supply_statuses",
+  {
+    id: text("id").primaryKey(),
+    hospitalId: text("hospital_id")
+      .notNull()
+      .references(() => hospitals.id, { onDelete: "cascade" }),
+    category: text("category").notNull(),
+    status: text("status").notNull().default("unknown"),
+    publicNote: text("public_note").notNull().default(""),
+    restrictedNote: text("restricted_note").notNull().default(""),
+    staleAfterHours: integer("stale_after_hours").notNull().default(12),
+    lastUpdatedAt: epochMs("last_updated_at").notNull(),
+    lastConfirmedAt: epochMs("last_confirmed_at").notNull(),
+    updatedBy: text("updated_by").notNull().default("equipo_operativo"),
+    source: text("source").notNull().default("admin_panel"),
+    createdAt: epochMs("created_at").notNull(),
+  },
+  (t) => [
+    uniqueIndex("idx_hospital_supply_status_unique").on(
+      t.hospitalId,
+      t.category,
+    ),
+    index("idx_hospital_supply_status_stale").on(
+      t.category,
+      t.status,
+      t.lastConfirmedAt,
+    ),
+    index("idx_hospital_supply_status_hospital").on(t.hospitalId),
+  ],
+);
+
+export const hospitalSupplyNeeds = pgTable(
+  "hospital_supply_needs",
+  {
+    id: text("id").primaryKey(),
+    hospitalId: text("hospital_id")
+      .notNull()
+      .references(() => hospitals.id, { onDelete: "cascade" }),
+    category: text("category").notNull(),
+    itemType: text("item_type").notNull(),
+    quantity: integer("quantity"),
+    unit: text("unit").notNull().default(""),
+    urgency: text("urgency").notNull().default("yellow"),
+    status: text("status").notNull().default("active"),
+    publicNote: text("public_note").notNull().default(""),
+    restrictedNote: text("restricted_note").notNull().default(""),
+    lastConfirmedAt: epochMs("last_confirmed_at").notNull(),
+    updatedBy: text("updated_by").notNull().default("equipo_operativo"),
+    source: text("source").notNull().default("admin_panel"),
+    createdAt: epochMs("created_at").notNull(),
+    updatedAt: epochMs("updated_at").notNull(),
+  },
+  (t) => [
+    index("idx_hospital_supply_needs_active").on(
+      t.hospitalId,
+      t.status,
+      t.urgency,
+      t.updatedAt.desc(),
+    ),
+    index("idx_hospital_supply_needs_category").on(t.category, t.status),
+  ],
+);
+
+export const hospitalSupplyHelpRequests = pgTable(
+  "hospital_supply_help_requests",
+  {
+    id: text("id").primaryKey(),
+    hospitalId: text("hospital_id")
+      .notNull()
+      .references(() => hospitals.id, { onDelete: "cascade" }),
+    category: text("category").notNull(),
+    message: text("message").notNull().default(""),
+    urgency: text("urgency").notNull().default("yellow"),
+    status: text("status").notNull().default("open"),
+    requestedBy: text("requested_by").notNull().default("poc_hospitalario"),
+    source: text("source").notNull().default("admin_panel"),
+    restrictedNote: text("restricted_note").notNull().default(""),
+    createdAt: epochMs("created_at").notNull(),
+    updatedAt: epochMs("updated_at").notNull(),
+  },
+  (t) => [
+    index("idx_hospital_supply_help_open").on(
+      t.status,
+      t.urgency,
+      t.createdAt.desc(),
+    ),
+    index("idx_hospital_supply_help_hospital").on(t.hospitalId),
+  ],
+);
+
+export const hospitalPocAssignments = pgTable(
+  "hospital_poc_assignments",
+  {
+    id: text("id").primaryKey(),
+    hospitalId: text("hospital_id")
+      .notNull()
+      .references(() => hospitals.id, { onDelete: "cascade" }),
+    displayName: text("display_name").notNull().default("POC hospitalario"),
+    role: text("role").notNull().default("hospital_poc"),
+    restrictedContact: text("restricted_contact").notNull().default(""),
+    active: boolean("active").notNull().default(true),
+    createdAt: epochMs("created_at").notNull(),
+    updatedAt: epochMs("updated_at").notNull(),
+  },
+  (t) => [
+    index("idx_hospital_poc_assignments_hospital").on(t.hospitalId, t.active),
+  ],
+);
+
+export const hospitalSupplyEvents = pgTable(
+  "hospital_supply_events",
+  {
+    id: text("id").primaryKey(),
+    hospitalId: text("hospital_id")
+      .notNull()
+      .references(() => hospitals.id, { onDelete: "cascade" }),
+    category: text("category"),
+    entityType: text("entity_type").notNull(),
+    entityId: text("entity_id"),
+    action: text("action").notNull(),
+    actor: text("actor").notNull().default("equipo_operativo"),
+    source: text("source").notNull().default("admin_panel"),
+    payload: jsonb("payload").notNull().default({}),
+    createdAt: epochMs("created_at").notNull(),
+  },
+  (t) => [
+    index("idx_hospital_supply_events_hospital").on(
+      t.hospitalId,
+      t.createdAt.desc(),
+    ),
+    index("idx_hospital_supply_events_entity").on(t.entityType, t.entityId),
+  ],
+);
+
 /* ----------------------------------------------------------------- donations */
 export const donations = pgTable(
   "donations",

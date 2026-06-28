@@ -9,6 +9,7 @@ import {
 } from "@/lib/types";
 import AdminLogin from "../components/AdminLogin";
 import { formatDonationUsd } from "@/lib/donation-shared";
+import HospitalSuppliesPanel from "./HospitalSuppliesPanel";
 
 const ADMIN_STORAGE_KEY = "emergency:adminToken";
 const POLL_INTERVAL_MS = 7000;
@@ -181,6 +182,7 @@ const HUB_TYPE_LABEL: Record<string, string> = {
 
 type Tab =
   | "analytics"
+  | "supplies"
   | "reports"
   | "chat"
   | "missing"
@@ -938,6 +940,7 @@ export default function AdminDashboard() {
           {(
             [
               ["analytics", "Analytics"],
+              ["supplies", "Insumos hospitalarios"],
               ["reports", `Reportes (${data?.reports.length ?? 0})`],
               ["missing", `Desaparecidas (${data?.people.length ?? 0})`],
               ["chat", `Chat (${data?.messages.length ?? 0})`],
@@ -1077,6 +1080,8 @@ export default function AdminDashboard() {
               </div>
             </section>
           )}
+
+          {tab === "supplies" && <HospitalSuppliesPanel token={token} query={query} />}
 
           {tab === "reports" && (
             <ul className="divide-y divide-slate-100">

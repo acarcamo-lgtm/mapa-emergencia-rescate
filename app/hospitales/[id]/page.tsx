@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import { getHospital, listPatients } from "@/lib/hospitals";
+import { getPublicHospitalSupplySummary } from "@/lib/hospital-supplies";
 import {
   buildHospitalSlug,
   FACILITY_TYPE_META,
@@ -33,7 +34,10 @@ export default async function HospitalPage({ params }: PageProps) {
   const canonicalSlug = buildHospitalSlug(hospital);
   if (id !== canonicalSlug) redirect(`/hospitales/${canonicalSlug}`);
 
-  const patients = await listPatients(hospital.id);
+  const [patients, supply] = await Promise.all([
+    listPatients(hospital.id),
+    getPublicHospitalSupplySummary(hospital.id),
+  ]);
   const zone = PRIORITY_ZONE_META[hospital.priorityZone];
   const facility = FACILITY_TYPE_META[hospital.facilityType];
 
@@ -102,7 +106,11 @@ export default async function HospitalPage({ params }: PageProps) {
       </section>
 
       <div className="mx-auto w-full max-w-5xl px-4 py-6">
-        <HospitalDetailView hospital={hospital} initialPatients={patients} />
+        <HospitalDetailView
+          hospital={hospital}
+          initialPatients={patients}
+          initialSupply={supply}
+        />
 
         <div className="mt-6 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
           <p className="font-semibold">⚠️ Importante</p>
