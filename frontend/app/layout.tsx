@@ -5,7 +5,6 @@ import { GoogleAnalytics } from "@next/third-parties/google";
 import "./globals.css";
 import PwaRegister from "./components/PwaRegister";
 import MourningRibbon from "./components/MourningRibbon";
-import StickyHelpButton from "./components/StickyHelpButton";
 import OpenPanelProduction from "./components/OpenPanelProduction";
 import ThemeProvider from "./components/ThemeProvider";
 import QueryProvider from "./components/QueryProvider";
@@ -181,7 +180,6 @@ export default function RootLayout({
 
         <QueryProvider>
           {children}
-          <StickyHelpButton />
         </QueryProvider>
         <PwaRegister />
         <script
