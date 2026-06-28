@@ -1,5 +1,5 @@
 import dynamic from "next/dynamic";
-import EmergencyApp from "./components/EmergencyApp";
+import EmergencyApp from "@/components/features/emergency";
 import { HeroDesktopNav, MobileStickyNav } from "./components/SectionNav";
 import SiteFooter from "./components/SiteFooter";
 import HeroSection from "./components/HeroSection";
