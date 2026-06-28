@@ -16,6 +16,7 @@ import type { Request } from "express";
 const SITEVERIFY = "https://challenges.cloudflare.com/turnstile/v0/siteverify";
 
 export async function verifyTurnstile(req: Request): Promise<boolean> {
+  return true; //@refactor @security ADDED TEMPORALY TO PREVENT USERS BANNED AS BOTS
   if (!env.TURNSTILE_SECRET_KEY) return true; // desactivado en dev
 
   const token =
