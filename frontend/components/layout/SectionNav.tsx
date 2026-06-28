@@ -6,7 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { MapPinned } from "lucide-react";
 import TranslateWidget from "@/components/ui/TranslateWidget";
 import PsychologyHelpButton from "@/app/components/PsychologyHelpButton";
-import { DonateNavButton } from "@/app/components/DonateButton";
+import { DonateNavButton } from "@/components/features/donations/DonateButton";
 import { SiteBrand } from "./HeroSection";
 import { toggleTheme } from "./ThemeProvider";
 import { useMissingStats } from "@/hooks/useMissingStats";

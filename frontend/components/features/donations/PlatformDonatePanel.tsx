@@ -7,7 +7,7 @@ import {
   formatDonationUsd,
 } from "@/lib/donation-shared";
 import { trackEvent } from "@/lib/openpanel";
-import { useDonationMonthly } from "@/app/components/useDonationMonthly";
+import { useDonationMonthly } from "@/components/features/donations/useDonationMonthly";
 
 type Props = {
   titleId?: string;
