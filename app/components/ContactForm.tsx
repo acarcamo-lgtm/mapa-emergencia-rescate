@@ -2,47 +2,43 @@
 
 import { useState } from "react";
 import { CONTACT_EMAIL } from "@/lib/site";
+import { useContactSubmit } from "@/hooks/contact";
 
 export default function ContactForm() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [subject, setSubject] = useState("");
   const [message, setMessage] = useState("");
-  const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  async function handleSubmit(event: React.FormEvent) {
+  const contactMutation = useContactSubmit();
+  const submitting = contactMutation.isPending;
+
+  function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
     setError(null);
     setSuccess(null);
-    setSubmitting(true);
 
-    try {
-      const res = await fetch("/api/contact", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, email, subject, message }),
-      });
-      const data = (await res.json().catch(() => ({}))) as {
-        error?: string;
-        message?: string;
-      };
-
-      if (!res.ok) {
-        throw new Error(data.error ?? "No se pudo enviar el mensaje.");
-      }
-
-      setSuccess(data.message ?? "Mensaje enviado.");
-      setName("");
-      setEmail("");
-      setSubject("");
-      setMessage("");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Error al enviar.");
-    } finally {
-      setSubmitting(false);
-    }
+    contactMutation.mutate(
+      { name, email, subject, message },
+      {
+        onSuccess: (data) => {
+          setSuccess(data.message ?? "Mensaje enviado.");
+          setName("");
+          setEmail("");
+          setSubject("");
+          setMessage("");
+        },
+        onError: (err) => {
+          setError(
+            err instanceof Error
+              ? err.message
+              : "No se pudo enviar el mensaje.",
+          );
+        },
+      },
+    );
   }
 
   return (

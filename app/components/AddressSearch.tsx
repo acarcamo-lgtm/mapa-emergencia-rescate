@@ -1,12 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useGeocodeSearch, type GeocodeResult } from "@/hooks/geocode";
 
-export interface GeocodeResult {
-  lat: number;
-  lng: number;
-  label: string;
-}
+export type { GeocodeResult };
 
 interface AddressSearchProps {
   onSelect: (result: GeocodeResult) => void;
@@ -17,11 +14,12 @@ interface AddressSearchProps {
 export default function AddressSearch({ onSelect, bias }: AddressSearchProps) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<GeocodeResult[]>([]);
-  const [loading, setLoading] = useState(false);
   const [locating, setLocating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  const geocode = useGeocodeSearch();
+  const loading = geocode.isPending;
 
   useEffect(() => {
     function onClickOutside(event: MouseEvent) {
@@ -43,26 +41,17 @@ export default function AddressSearch({ onSelect, bias }: AddressSearchProps) {
       setError("Escribe al menos 3 caracteres.");
       return;
     }
-    setLoading(true);
     setError(null);
     try {
-      const params = new URLSearchParams({ q });
-      if (bias) {
-        params.set("lat", String(bias.lat));
-        params.set("lng", String(bias.lng));
-      }
-      const res = await fetch(`/api/geocode?${params.toString()}`);
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error ?? "No se pudo buscar.");
-      setResults(data.results ?? []);
+      const data = await geocode.mutateAsync({ q, bias });
+      const found = data.results ?? [];
+      setResults(found);
       setOpen(true);
-      if ((data.results ?? []).length === 0) {
+      if (found.length === 0) {
         setError("No se encontró esa dirección en Venezuela.");
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error al buscar.");
-    } finally {
-      setLoading(false);
     }
   }
 

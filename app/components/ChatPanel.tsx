@@ -4,6 +4,11 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } 
 import { useLowBandwidthMode } from "./useLowBandwidthMode";
 import { trackEvent } from "./openpanel";
 import {
+  useChatMessages,
+  useDeleteChatMessage,
+  useSendChatMessage,
+} from "@/hooks/chat";
+import {
   CHAT_ROLES,
   CHAT_ROLE_KEYS,
   getRoleMeta,
@@ -66,7 +71,6 @@ function formatTime(ts: number): string {
 }
 
 export default function ChatPanel() {
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [name, setName] = useState(() =>
     typeof window === "undefined"
       ? ""
@@ -80,7 +84,6 @@ export default function ChatPanel() {
   const [showRolePicker, setShowRolePicker] = useState(false);
   const [text, setText] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [sending, setSending] = useState(false);
   const [adminToken, setAdminToken] = useState<string | null>(null);
   const [replyingTo, setReplyingTo] = useState<ChatMessage | null>(null);
   const [roleFilter, setRoleFilter] = useState<ChatRole | "all">("all");
@@ -89,45 +92,26 @@ export default function ChatPanel() {
     LOW_BANDWIDTH_POLL_INTERVAL_MS,
   );
 
+  const { data: messages = [] } = useChatMessages(
+    roleFilter,
+    network.pollIntervalMs,
+  );
+  const sendMutation = useSendChatMessage();
+  const deleteMutation = useDeleteChatMessage();
+  const sending = sendMutation.isPending;
+
   const listRef = useRef<HTMLDivElement>(null);
   const atBottomRef = useRef(true);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  const fetchMessages = useCallback(async () => {
-    setAdminToken(sessionStorage.getItem(ADMIN_STORAGE_KEY));
-    try {
-      const qs = roleFilter !== "all" ? `?role=${roleFilter}` : "";
-      const res = await fetch(`/api/chat${qs}`, { cache: "no-store" });
-      if (!res.ok) return;
-      const data = await res.json();
-      setMessages(data.messages ?? []);
-    } catch {
-      // se reintenta en el siguiente ciclo
-    }
-  }, [roleFilter]);
-
+  // El token admin vive en sessionStorage (no es dato de red): re-leerlo al
+  // montar y al volver la pestaña a primer plano, como hacía el poller previo.
   useEffect(() => {
-    let interval: ReturnType<typeof setInterval> | null = null;
-    const start = () => {
-      if (interval) return;
-      fetchMessages();
-      interval = setInterval(fetchMessages, network.pollIntervalMs);
-    };
-    const stop = () => {
-      if (interval) clearInterval(interval);
-      interval = null;
-    };
-    const onVisibility = () => {
-      if (document.visibilityState === "visible") start();
-      else stop();
-    };
-    onVisibility();
-    document.addEventListener("visibilitychange", onVisibility);
-    return () => {
-      stop();
-      document.removeEventListener("visibilitychange", onVisibility);
-    };
-  }, [fetchMessages, network.pollIntervalMs]);
+    const read = () => setAdminToken(sessionStorage.getItem(ADMIN_STORAGE_KEY));
+    read();
+    document.addEventListener("visibilitychange", read);
+    return () => document.removeEventListener("visibilitychange", read);
+  }, []);
 
   useEffect(() => {
     if (atBottomRef.current && listRef.current) {
@@ -154,21 +138,14 @@ export default function ChatPanel() {
       setError(null);
       const trimmed = text.trim();
       if (!trimmed) return;
-      setSending(true);
       localStorage.setItem(NAME_STORAGE_KEY, name.trim());
       try {
-        const res = await fetch("/api/chat", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            name: name.trim(),
-            text: trimmed,
-            role,
-            replyTo: replyingTo?.id ?? null,
-          }),
+        await sendMutation.mutateAsync({
+          name: name.trim(),
+          text: trimmed,
+          role,
+          replyTo: replyingTo?.id ?? null,
         });
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(data.error ?? "No se pudo enviar.");
         trackEvent("chat_message_sent", {
           role,
           hasReply: Boolean(replyingTo),
@@ -178,32 +155,19 @@ export default function ChatPanel() {
         setText("");
         setReplyingTo(null);
         atBottomRef.current = true;
-        if (data.message) {
-          setMessages((prev) =>
-            prev.some((m) => m.id === data.message.id)
-              ? prev
-              : [...prev, data.message],
-          );
-        }
       } catch (err) {
         setError(err instanceof Error ? err.message : "Error al enviar.");
-      } finally {
-        setSending(false);
       }
     },
-    [text, name, role, replyingTo],
+    [text, name, role, replyingTo, sendMutation],
   );
 
   const handleDelete = useCallback(
-    async (id: string) => {
+    (id: string) => {
       if (!adminToken) return;
-      setMessages((prev) => prev.filter((m) => m.id !== id));
-      await fetch(`/api/chat/${id}`, {
-        method: "DELETE",
-        headers: { "x-admin-token": adminToken },
-      }).catch(() => {});
+      deleteMutation.mutate({ id, adminToken });
     },
-    [adminToken],
+    [adminToken, deleteMutation],
   );
 
   const forest = useMemo(() => buildForest(messages), [messages]);

@@ -1,8 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import MissingPersonDetail from "./MissingPersonDetail";
 import { useLowBandwidthMode } from "./useLowBandwidthMode";
+import { useMissingList } from "@/hooks/missing";
 
 interface MissingPerson {
   id: string;
@@ -45,68 +46,30 @@ function formatDate(ts: number | null | undefined): string {
 }
 
 export default function FoundPersons() {
-  const [people, setPeople] = useState<MissingPerson[]>([]);
-  const [total, setTotal] = useState(0);
-  const [totalPages, setTotalPages] = useState(1);
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<MissingPerson | null>(null);
   const network = useLowBandwidthMode(
     POLL_INTERVAL_MS,
     LOW_BANDWIDTH_POLL_INTERVAL_MS,
   );
-  const requestIdRef = useRef(0);
   const listTopRef = useRef<HTMLDivElement | null>(null);
   const initialPageRef = useRef(true);
 
-  const fetchFound = useCallback(async () => {
-    const requestId = ++requestIdRef.current;
+  const { data } = useMissingList(
+    { status: "found", page, pageSize: PAGE_SIZE },
+    network.pollIntervalMs,
+  );
 
-    try {
-      const res = await fetch(
-        `/api/missing?status=found&page=${page}&pageSize=${PAGE_SIZE}`,
-        // no-cache (revalidar con If-None-Match), NO no-store: el endpoint emite
-        // ETag + stale-while-revalidate; con no-store se tiraba ese 304 y se
-        // re-descargaba el payload completo en cada poll.
-        { cache: "no-cache" },
-      );
-      if (!res.ok) return;
-      const data = await res.json();
-      // Ignorar respuestas de solicitudes anteriores (carrera con polling).
-      if (requestId !== requestIdRef.current) return;
-      setPeople(data.people ?? []);
-      setTotal(data.total ?? 0);
-      setTotalPages(data.totalPages ?? 1);
-      // El servidor acota la página al rango válido.
-      if (typeof data.page === "number" && data.page !== page) {
-        setPage(data.page);
-      }
-    } catch {
-      // se reintenta en el próximo ciclo
-    }
-  }, [page]);
+  const people = (data?.people ?? []) as MissingPerson[];
+  const total = data?.total ?? 0;
+  const totalPages = data?.totalPages ?? 1;
 
+  // El servidor acota la página al rango válido.
   useEffect(() => {
-    let interval: ReturnType<typeof setInterval> | null = null;
-    const start = () => {
-      if (interval) return;
-      fetchFound();
-      interval = setInterval(fetchFound, network.pollIntervalMs);
-    };
-    const stop = () => {
-      if (interval) clearInterval(interval);
-      interval = null;
-    };
-    const onVisibility = () => {
-      if (document.visibilityState === "visible") start();
-      else stop();
-    };
-    onVisibility();
-    document.addEventListener("visibilitychange", onVisibility);
-    return () => {
-      stop();
-      document.removeEventListener("visibilitychange", onVisibility);
-    };
-  }, [fetchFound, network.pollIntervalMs]);
+    if (typeof data?.page === "number" && data.page !== page) {
+      setPage(data.page);
+    }
+  }, [data?.page, page]);
 
   // Al cambiar de página, hacemos scroll al inicio de la lista (no en la
   // carga inicial).

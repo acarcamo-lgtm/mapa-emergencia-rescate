@@ -34,7 +34,11 @@ export const qk = {
     list: (role?: string) => ["chat", "list", role ?? "all"] as const,
   },
   donations: {
+    all: ["donations"] as const,
     monthly: ["donations", "monthly"] as const,
+  },
+  contact: {
+    all: ["contact"] as const,
   },
   geocode: (q: string) => ["geocode", q] as const,
 } as const;

@@ -1,29 +1,16 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useDonationMonthly as useDonationMonthlyQuery } from "@/hooks/donations";
 
-export type MonthlyDonation = {
-  raisedCents: number;
-  goalCents: number;
-};
+export type { MonthlyDonation } from "@/hooks/donations";
 
-export function useDonationMonthly(refreshKey?: unknown) {
-  const [monthly, setMonthly] = useState<MonthlyDonation | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    fetch("/api/donations", { cache: "no-store" })
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data: { monthly?: MonthlyDonation } | null) => {
-        if (!cancelled && data?.monthly) {
-          setMonthly(data.monthly);
-        }
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, [refreshKey]);
-
-  return monthly;
+/**
+ * Compat: misma firma `(refreshKey?) => MonthlyDonation | null` que el poller
+ * manual previo. El refresh ya NO depende de `refreshKey`: la mutación de
+ * donación invalida `qk.donations.all` y TanStack Query re-fetchea solo. El
+ * parámetro se conserva para no tocar los call sites.
+ */
+export function useDonationMonthly(_refreshKey?: unknown) {
+  const { data } = useDonationMonthlyQuery();
+  return data ?? null;
 }

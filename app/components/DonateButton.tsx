@@ -8,6 +8,7 @@ import {
   MIN_DONATION_CENTS,
   formatDonationUsd,
 } from "@/lib/donation-shared";
+import { useCreateDonation } from "@/hooks/donations";
 import { trackEvent } from "./openpanel";
 
 const SUGGESTED_AMOUNTS = [500, 1000, 2500, 5000, 10000] as const;
@@ -35,6 +36,7 @@ export function DonateModal({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const createDonation = useCreateDonation();
 
   useEffect(() => {
     setMounted(true);
@@ -90,19 +92,7 @@ export function DonateModal({
 
     setSubmitting(true);
     try {
-      const res = await fetch("/api/donations", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, amountCents }),
-      });
-      const data = (await res.json().catch(() => ({}))) as {
-        error?: string;
-        paypalUrl?: string;
-      };
-
-      if (!res.ok) {
-        throw new Error(data.error ?? "No se pudo registrar la donación.");
-      }
+      const data = await createDonation.mutateAsync({ name, amountCents });
 
       trackEvent("donation_intent", { amountCents });
 
