@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { Metadata } from "next";
-import SubPageShell from "@/app/components/SubPageShell";
+import SubPageShell from "@/components/layout/SubPageShell";
 import SeismicRiskMap from "@/app/components/SeismicRiskMap";
 import {
   OSM_URL,

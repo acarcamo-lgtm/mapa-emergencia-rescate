@@ -1,11 +1,11 @@
 import dynamic from "next/dynamic";
 import EmergencyApp from "@/components/features/emergency";
-import { HeroDesktopNav, MobileStickyNav } from "@/app/components/SectionNav";
-import SiteFooter from "@/app/components/SiteFooter";
-import HeroSection from "@/app/components/HeroSection";
-import HelpSection from "@/app/components/HelpSection";
-import AlertTicker from "@/app/components/AlertTicker";
-import TutorialSteps from "@/app/components/TutorialSteps";
+import { HeroDesktopNav, MobileStickyNav } from "@/components/layout/SectionNav";
+import SiteFooter from "@/components/layout/SiteFooter";
+import HeroSection from "@/components/layout/HeroSection";
+import HelpSection from "@/components/layout/HelpSection";
+import AlertTicker from "@/components/layout/AlertTicker";
+import TutorialSteps from "@/components/layout/TutorialSteps";
 
 const MissingPersonsCarousel = dynamic(
   () => import("@/components/features/missing-carousel"),

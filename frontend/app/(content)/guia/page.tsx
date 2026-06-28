@@ -1,6 +1,6 @@
 import dynamic from "next/dynamic";
 import type { Metadata } from "next";
-import SubPageShell from "@/app/components/SubPageShell";
+import SubPageShell from "@/components/layout/SubPageShell";
 
 const SurvivalGuide = dynamic(
   () => import("@/app/components/SurvivalGuide"),

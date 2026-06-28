@@ -3,8 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { HandCoins } from "lucide-react";
-import PlatformDonatePanel from "./PlatformDonatePanel";
-import { trackEvent } from "./openpanel";
+import PlatformDonatePanel from "@/app/components/PlatformDonatePanel";
+import { trackEvent } from "@/app/components/openpanel";
 
 export default function StickyHelpButton() {
   const pathname = usePathname();

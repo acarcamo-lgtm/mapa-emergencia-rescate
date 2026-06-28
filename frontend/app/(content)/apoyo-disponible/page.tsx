@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import type { ReactNode } from "react";
-import SubPageShell from "@/app/components/SubPageShell";
+import SubPageShell from "@/components/layout/SubPageShell";
 
 export const metadata: Metadata = {
   title: "Apoyo disponible · Mapa de Emergencia Venezuela",
