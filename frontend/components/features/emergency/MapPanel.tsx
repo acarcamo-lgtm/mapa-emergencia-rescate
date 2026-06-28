@@ -6,7 +6,7 @@ import type { MissingMapMarker } from "@/hooks/missing";
 import type { MapBounds } from "@/components/features/map";
 import AddressSearch, {
   type GeocodeResult,
-} from "@/app/components/AddressSearch";
+} from "@/components/features/emergency/AddressSearch";
 import FilterChips from "./FilterChips";
 
 // Mapa Leaflet: pesado + depende de window. next/dynamic ssr:false lo saca del

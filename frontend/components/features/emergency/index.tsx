@@ -21,7 +21,7 @@ import {
 import { useLowBandwidthMode } from "@/hooks/useLowBandwidthMode";
 import { useMissingStats } from "@/hooks/useMissingStats";
 import type { MapBounds } from "@/components/features/map";
-import type { GeocodeResult } from "@/app/components/AddressSearch";
+import type { GeocodeResult } from "@/components/features/emergency/AddressSearch";
 import {
   countPending,
   enqueueReport,
