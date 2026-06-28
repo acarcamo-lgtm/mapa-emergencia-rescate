@@ -18,6 +18,11 @@ import * as reportsSvc from "@/services/reports";
 import * as chatSvc from "@/services/chat";
 import * as missingSvc from "@/services/missing";
 import * as syncSvc from "@/services/sync";
+import * as hospitalsSvc from "@/services/hospitals";
+import type {
+  Hospital,
+  RestrictedHospitalSupplySnapshot,
+} from "@/services/hospitals";
 
 const HOUR = 60 * 60 * 1000;
 const DAY = 24 * HOUR;
@@ -237,5 +242,106 @@ adminRouter.get(
       people,
       sync: { runs: syncRuns, state: syncState },
     });
+  }),
+);
+
+interface AdminHospitalSupplyRow {
+  hospital: Hospital;
+  supply: RestrictedHospitalSupplySnapshot;
+}
+
+/**
+ * @swagger
+ * /api/admin/hospital-supplies:
+ *   get:
+ *     tags: [admin]
+ *     summary: Superficie operativa de insumos hospitalarios (requiere admin)
+ *     responses:
+ *       200:
+ *         description: Hospitales con estados, necesidades, POCs y solicitudes restringidas
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 generatedAt: { type: integer, description: epoch-ms }
+ *                 stats:
+ *                   type: object
+ *                   properties:
+ *                     hospitals: { type: integer }
+ *                     redCategories: { type: integer }
+ *                     yellowCategories: { type: integer }
+ *                     staleCategories: { type: integer }
+ *                     activeNeeds: { type: integer }
+ *                     helpOpen: { type: integer }
+ *                 hospitals:
+ *                   type: array
+ *                   items: { $ref: '#/components/schemas/AdminHospitalSupplyRow' }
+ *       401:
+ *         description: No autorizado
+ *         content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+ *       503:
+ *         description: No se pudo cargar la superficie de insumos
+ *         content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+ */
+adminRouter.get(
+  "/hospital-supplies",
+  requireAdmin,
+  asyncHandler(async (_req, res) => {
+    try {
+      const hospitals = await hospitalsSvc.listHospitals({ limit: 1000 });
+      const snapshots = await hospitalsSvc.listRestrictedSupplySnapshotsForHospitals(
+        hospitals.map((hospital) => hospital.id),
+      );
+      const rows: AdminHospitalSupplyRow[] = hospitals.map((hospital) => ({
+        hospital,
+        supply: snapshots.get(hospital.id) ?? {
+          hospitalId: hospital.id,
+          summary: {
+            statuses: [],
+            activeNeeds: [],
+            counts: { red: 0, yellow: 0, stale: 0, activeNeeds: 0 },
+            worstStatus: "unknown",
+            lastConfirmedAt: null,
+          },
+          statuses: [],
+          activeNeeds: [],
+          helpRequests: [],
+          pocs: [],
+        },
+      }));
+
+      let redCategories = 0;
+      let yellowCategories = 0;
+      let staleCategories = 0;
+      let activeNeeds = 0;
+      let helpOpen = 0;
+      for (const row of rows) {
+        redCategories += row.supply.statuses.filter((s) => s.status === "red").length;
+        yellowCategories += row.supply.statuses.filter(
+          (s) => s.status === "yellow",
+        ).length;
+        staleCategories += row.supply.statuses.filter((s) => s.freshness.isStale).length;
+        activeNeeds += row.supply.summary.counts.activeNeeds;
+        helpOpen += row.supply.helpRequests.filter((request) =>
+          hospitalsSvc.isOpenHospitalSupplyHelpStatus(request.status),
+        ).length;
+      }
+
+      res.set(NO_STORE).json({
+        generatedAt: Date.now(),
+        stats: {
+          hospitals: rows.length,
+          redCategories,
+          yellowCategories,
+          staleCategories,
+          activeNeeds,
+          helpOpen,
+        },
+        hospitals: rows,
+      });
+    } catch {
+      throw serviceUnavailable("No se pudieron cargar los insumos hospitalarios.");
+    }
   }),
 );

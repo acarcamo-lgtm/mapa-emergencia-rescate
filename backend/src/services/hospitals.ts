@@ -246,6 +246,32 @@ export interface HospitalSupplyHelpRequest {
   updatedAgo: string;
 }
 
+export interface HospitalPocAssignment {
+  id: string;
+  hospitalId: string;
+  displayName: string;
+  role: "operator_admin" | "hospital_poc" | "ops_reader";
+  restrictedContact: string;
+  active: boolean;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface RestrictedHospitalSupplySnapshot {
+  hospitalId: string;
+  summary: PublicHospitalSupplySummary;
+  statuses: RestrictedHospitalSupplyStatus[];
+  activeNeeds: RestrictedHospitalSupplyNeed[];
+  helpRequests: HospitalSupplyHelpRequest[];
+  pocs: HospitalPocAssignment[];
+}
+
+export function isOpenHospitalSupplyHelpStatus(
+  status: HospitalSupplyHelpStatus,
+): boolean {
+  return status === "open" || status === "contacting";
+}
+
 export interface Hospital {
   id: string;
   externalId: string | null;
@@ -699,6 +725,7 @@ type Validation<T> = { ok: true; value: T } | { ok: false; error: string };
 type StatusRow = typeof hospitalSupplyStatuses.$inferSelect;
 type NeedRow = typeof hospitalSupplyNeeds.$inferSelect;
 type HelpRow = typeof hospitalSupplyHelpRequests.$inferSelect;
+type PocRow = typeof hospitalPocAssignments.$inferSelect;
 
 export interface SupplyStatusUpdateInput {
   category?: unknown;
@@ -1455,4 +1482,125 @@ export async function getPublicSupplySummariesForHospitals(
   hospitalIds: string[],
 ): Promise<Map<string, PublicHospitalSupplySummary>> {
   return loadPublicSupplySummariesForHospitalIds(hospitalIds);
+}
+
+// ============================================================================
+// Snapshots restringidos (admin-only) — portado de lib/hospital-supplies.ts
+// ============================================================================
+
+function rowToPoc(row: PocRow): HospitalPocAssignment {
+  const role =
+    row.role === "operator_admin" ||
+    row.role === "hospital_poc" ||
+    row.role === "ops_reader"
+      ? row.role
+      : "hospital_poc";
+  return {
+    id: row.id,
+    hospitalId: row.hospitalId,
+    displayName: row.displayName,
+    role,
+    restrictedContact: row.restrictedContact,
+    active: Boolean(row.active),
+    createdAt: Number(row.createdAt),
+    updatedAt: Number(row.updatedAt),
+  };
+}
+
+async function loadRestrictedSupplyForHospitalIds(
+  hospitalIds: string[],
+): Promise<Map<string, RestrictedHospitalSupplySnapshot>> {
+  const uniqueIds = [...new Set(hospitalIds)].filter(Boolean);
+  const map = new Map<string, RestrictedHospitalSupplySnapshot>();
+  for (const hospitalId of uniqueIds) {
+    map.set(hospitalId, {
+      hospitalId,
+      summary: emptySummary(),
+      statuses: [],
+      activeNeeds: [],
+      helpRequests: [],
+      pocs: [],
+    });
+  }
+  if (uniqueIds.length === 0) return map;
+
+  const now = Date.now();
+  const db = await getDb();
+  const [statusRows, needRows, helpRows, pocRows] = await Promise.all([
+    db
+      .select()
+      .from(hospitalSupplyStatuses)
+      .where(inArray(hospitalSupplyStatuses.hospitalId, uniqueIds)),
+    db
+      .select()
+      .from(hospitalSupplyNeeds)
+      .where(
+        and(
+          inArray(hospitalSupplyNeeds.hospitalId, uniqueIds),
+          inArray(hospitalSupplyNeeds.status, [...ACTIVE_HOSPITAL_SUPPLY_NEED_STATUSES]),
+        ),
+      )
+      .orderBy(desc(hospitalSupplyNeeds.updatedAt)),
+    db
+      .select()
+      .from(hospitalSupplyHelpRequests)
+      .where(
+        and(
+          inArray(hospitalSupplyHelpRequests.hospitalId, uniqueIds),
+          inArray(hospitalSupplyHelpRequests.status, ["open", "contacting"]),
+        ),
+      )
+      .orderBy(desc(hospitalSupplyHelpRequests.updatedAt)),
+    db
+      .select()
+      .from(hospitalPocAssignments)
+      .where(inArray(hospitalPocAssignments.hospitalId, uniqueIds)),
+  ]);
+
+  for (const row of statusRows) {
+    map.get(row.hospitalId)?.statuses.push(rowToRestrictedStatus(row, now));
+  }
+  for (const row of needRows) {
+    map.get(row.hospitalId)?.activeNeeds.push(rowToRestrictedNeed(row, now));
+  }
+  for (const row of helpRows) {
+    map.get(row.hospitalId)?.helpRequests.push(rowToHelpRequest(row, now));
+  }
+  for (const row of pocRows) {
+    map.get(row.hospitalId)?.pocs.push(rowToPoc(row));
+  }
+
+  for (const snapshot of map.values()) {
+    snapshot.statuses.sort(
+      (a, b) =>
+        HOSPITAL_SUPPLY_CATEGORIES.indexOf(a.category) -
+        HOSPITAL_SUPPLY_CATEGORIES.indexOf(b.category),
+    );
+    snapshot.activeNeeds.sort((a, b) => b.updatedAt - a.updatedAt);
+    snapshot.helpRequests.sort((a, b) => b.updatedAt - a.updatedAt);
+    snapshot.summary = buildSupplySummary(snapshot.statuses, snapshot.activeNeeds);
+  }
+  return map;
+}
+
+export async function getRestrictedHospitalSupplySnapshot(
+  hospitalId: string,
+): Promise<RestrictedHospitalSupplySnapshot> {
+  const snapshots = await loadRestrictedSupplyForHospitalIds([hospitalId]);
+  return (
+    snapshots.get(hospitalId) ?? {
+      hospitalId,
+      summary: emptySummary(),
+      statuses: [],
+      activeNeeds: [],
+      helpRequests: [],
+      pocs: [],
+    }
+  );
+}
+
+export async function listRestrictedSupplySnapshotsForHospitals(
+  hospitalIds: string[],
+): Promise<Map<string, RestrictedHospitalSupplySnapshot>> {
+  return loadRestrictedSupplyForHospitalIds(hospitalIds);
 }
