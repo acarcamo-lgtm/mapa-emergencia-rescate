@@ -15,7 +15,7 @@ export default function ContactForm() {
 
   const contactMutation = useContactSubmit();
   const submitting = contactMutation.isPending;
-  const turnstile = useTurnstile();
+  const { mountRef: turnstileMount, getToken: turnstileGetToken } = useTurnstile();
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
@@ -23,7 +23,7 @@ export default function ContactForm() {
     setSuccess(null);
 
     // Token FRESCO de Turnstile para este envío (se resetea tras leerlo).
-    const turnstileToken = await turnstile.getToken();
+    const turnstileToken = await turnstileGetToken();
     contactMutation.mutate(
       { name, email, subject, message, turnstileToken },
       {
@@ -138,7 +138,7 @@ export default function ContactForm() {
         </p>
       )}
 
-      <div ref={turnstile.ref} className="flex justify-center empty:hidden" />
+      <div ref={turnstileMount} className="flex justify-center empty:hidden" />
 
       <button
         type="submit"

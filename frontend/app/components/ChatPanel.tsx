@@ -100,7 +100,7 @@ export default function ChatPanel() {
   const sendMutation = useSendChatMessage();
   const deleteMutation = useDeleteChatMessage();
   const sending = sendMutation.isPending;
-  const turnstile = useTurnstile();
+  const { mountRef: turnstileMount, getToken: turnstileGetToken } = useTurnstile();
 
   const listRef = useRef<HTMLDivElement>(null);
   const atBottomRef = useRef(true);
@@ -143,7 +143,7 @@ export default function ChatPanel() {
       localStorage.setItem(NAME_STORAGE_KEY, name.trim());
       try {
         // Token FRESCO de Turnstile para este envío (se resetea tras leerlo).
-        const turnstileToken = await turnstile.getToken();
+        const turnstileToken = await turnstileGetToken();
         await sendMutation.mutateAsync({
           name: name.trim(),
           text: trimmed,
@@ -164,7 +164,7 @@ export default function ChatPanel() {
         setError(err instanceof Error ? err.message : "Error al enviar.");
       }
     },
-    [text, name, role, replyingTo, sendMutation, turnstile],
+    [text, name, role, replyingTo, sendMutation, turnstileGetToken],
   );
 
   const handleDelete = useCallback(
@@ -430,7 +430,7 @@ export default function ChatPanel() {
               {sending ? "…" : "Enviar"}
             </button>
           </div>
-          <div ref={turnstile.ref} className="flex justify-center empty:hidden" />
+          <div ref={turnstileMount} className="flex justify-center empty:hidden" />
           {error && <p className="text-sm text-red-600">{error}</p>}
         </form>
       </div>

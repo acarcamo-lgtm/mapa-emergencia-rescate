@@ -46,7 +46,7 @@ export default function HospitalForm({ onCancel, onSubmit, initialState }: Props
   const [priorityZone, setPriorityZone] = useState<HospitalPriorityZone>("P3");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const turnstile = useTurnstile();
+  const { mountRef: turnstileMount, getToken: turnstileGetToken } = useTurnstile();
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
@@ -56,7 +56,7 @@ export default function HospitalForm({ onCancel, onSubmit, initialState }: Props
     setSubmitting(true);
     try {
       // Token FRESCO de Turnstile para este envío (se resetea tras leerlo).
-      const turnstileToken = await turnstile.getToken();
+      const turnstileToken = await turnstileGetToken();
       await onSubmit({
         name: name.trim(),
         facilityType,
@@ -218,7 +218,7 @@ export default function HospitalForm({ onCancel, onSubmit, initialState }: Props
           )}
         </div>
 
-        <div ref={turnstile.ref} className="flex justify-center empty:hidden px-5" />
+        <div ref={turnstileMount} className="flex justify-center empty:hidden px-5" />
 
         <footer className="flex justify-end gap-2 border-t border-slate-200 bg-slate-50 px-5 py-3">
           <button

@@ -120,7 +120,7 @@ export default function ReportForm({
   onSubmit,
 }: ReportFormProps) {
   const dialogRef = useRef<HTMLDivElement>(null);
-  const turnstile = useTurnstile();
+  const { mountRef: turnstileMount, getToken: turnstileGetToken } = useTurnstile();
   // Al abrir (o al volver de "elegir en el mapa") movemos el foco al modal para
   // que Esc lo cierre de inmediato, y por accesibilidad.
   useEffect(() => {
@@ -206,7 +206,7 @@ export default function ReportForm({
     setSubmitting(true);
     try {
       // Token FRESCO de Turnstile para este envío (se resetea tras leerlo).
-      const turnstileToken = await turnstile.getToken();
+      const turnstileToken = await turnstileGetToken();
       await onSubmit({
         type,
         place: place.trim(),
@@ -482,7 +482,7 @@ export default function ReportForm({
             </p>
           )}
 
-          <div ref={turnstile.ref} className="flex justify-center empty:hidden" />
+          <div ref={turnstileMount} className="flex justify-center empty:hidden" />
 
           <div className="flex gap-2">
             <button

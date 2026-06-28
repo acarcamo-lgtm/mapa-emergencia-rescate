@@ -38,7 +38,7 @@ export function DonateModal({
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const createDonation = useCreateDonation();
-  const turnstile = useTurnstile();
+  const { mountRef: turnstileMount, getToken: turnstileGetToken } = useTurnstile();
 
   useEffect(() => {
     setMounted(true);
@@ -95,7 +95,7 @@ export function DonateModal({
     setSubmitting(true);
     try {
       // Token FRESCO de Turnstile para este envío (se resetea tras leerlo).
-      const turnstileToken = await turnstile.getToken();
+      const turnstileToken = await turnstileGetToken();
       const data = await createDonation.mutateAsync({ name, amountCents, turnstileToken });
 
       trackEvent("donation_intent", { amountCents });
@@ -254,7 +254,7 @@ export function DonateModal({
             </p>
           )}
 
-          <div ref={turnstile.ref} className="flex justify-center empty:hidden" />
+          <div ref={turnstileMount} className="flex justify-center empty:hidden" />
 
           <button
             type="submit"

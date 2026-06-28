@@ -8,7 +8,7 @@
  * Uso en un formulario:
  *   const turnstile = useTurnstile();
  *   ...
- *   <div ref={turnstile.ref} />          // donde quieras el widget (managed/invisible)
+ *   <div ref={turnstile.mountRef} />          // donde quieras el widget (managed/invisible)
  *   ...
  *   const token = await turnstile.getToken();   // en el submit, token FRESCO
  *   await mutate({ ...payload, turnstileToken: token });
@@ -69,8 +69,9 @@ function loadScript(): Promise<void> {
 }
 
 export interface UseTurnstile {
-  /** Monta el div del widget aquí. */
-  ref: (el: HTMLDivElement | null) => void;
+  /** Callback-ref: pásalo a un <div> donde montar el widget. Nombre != "ref"
+   *  a propósito (el lint react-hooks/refs marca cualquier `.ref` en render). */
+  mountRef: (el: HTMLDivElement | null) => void;
   /** Token FRESCO para este submit; resetea el widget tras leerlo. "" si no hay site key. */
   getToken: () => Promise<string>;
   /** True si Turnstile está activo (hay site key). */
@@ -152,5 +153,5 @@ export function useTurnstile(): UseTurnstile {
     });
   }, []);
 
-  return { ref: mount, getToken, enabled: Boolean(TURNSTILE_SITE_KEY) };
+  return { mountRef: mount, getToken, enabled: Boolean(TURNSTILE_SITE_KEY) };
 }

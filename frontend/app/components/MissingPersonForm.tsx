@@ -195,7 +195,7 @@ export default function MissingPersonForm({
   initialFoundPlace = null,
 }: Props) {
   const [mounted, setMounted] = useState(false);
-  const turnstile = useTurnstile();
+  const { mountRef: turnstileMount, getToken: turnstileGetToken } = useTurnstile();
   const [reportType, setReportType] =
     useState<MissingReportType>(initialReportType);
   const [foundPlace, setFoundPlace] = useState<FoundPlace | null>(
@@ -291,7 +291,7 @@ export default function MissingPersonForm({
       setSubmitting(true);
       try {
         // Token FRESCO de Turnstile para este envío (se resetea tras leerlo).
-        const turnstileToken = await turnstile.getToken();
+        const turnstileToken = await turnstileGetToken();
         await onSubmit({
           name: name.trim(),
           age: age.trim(),
@@ -344,7 +344,7 @@ export default function MissingPersonForm({
       foundPlace,
       personStatus,
       onSubmit,
-      turnstile,
+      turnstileGetToken,
     ],
   );
 
@@ -726,7 +726,7 @@ export default function MissingPersonForm({
           {error && <p className="text-sm text-red-600">{error}</p>}
 
           {/* Turnstile (managed/invisible). Solo aparece si CF pide interacción. */}
-          <div ref={turnstile.ref} className="flex justify-center empty:hidden" />
+          <div ref={turnstileMount} className="flex justify-center empty:hidden" />
 
           <footer className="e-report-modal__footer flex justify-end gap-2.5 pt-1">
             <button
