@@ -67,7 +67,7 @@ services:
 
   frontend:
     build:
-      context: .
+      context: ./frontend
       dockerfile: Dockerfile
       args:
         # URL absoluta del backend para el BROWSER (no la red de Docker).

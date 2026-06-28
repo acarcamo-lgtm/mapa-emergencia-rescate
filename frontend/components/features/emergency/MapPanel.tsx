@@ -2,7 +2,7 @@
 
 import dynamic from "next/dynamic";
 import type { EmergencyReport, ReportType } from "@/lib/types";
-import type { MissingMapMarker } from "@/lib/missing";
+import type { MissingMapMarker } from "@/hooks/missing";
 import type { MapBounds } from "@/app/components/MapView";
 import AddressSearch, {
   type GeocodeResult,

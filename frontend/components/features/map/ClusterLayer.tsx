@@ -5,7 +5,7 @@ import Supercluster, {
 	type ClusterProperties,
 	type AnyProps,
 } from "supercluster";
-import type { MissingMapMarker } from "@/lib/missing";
+import type { MissingMapMarker } from "@/hooks/missing";
 import { clusterIcon } from "./icons";
 import { MissingMarker, type MissingPointProps } from "./MissingMarker";
 

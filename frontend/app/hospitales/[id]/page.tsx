@@ -1,12 +1,14 @@
 import Link from "next/link";
 import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
-import { getHospital, listPatients } from "@/lib/hospitals";
-import { getPublicHospitalSupplySummary } from "@/lib/hospital-supplies";
+import { serverApiGet, serverApiGetOrNull } from "@/lib/server-api";
 import {
   buildHospitalSlug,
   FACILITY_TYPE_META,
   PRIORITY_ZONE_META,
+  type Hospital,
+  type HospitalPatient,
+  type PublicHospitalSupplySummary,
 } from "@/lib/hospitals-meta";
 import HospitalDetailView from "@/app/components/HospitalDetailView";
 
@@ -16,9 +18,16 @@ interface PageProps {
   params: Promise<{ id: string }>;
 }
 
+async function fetchHospital(id: string): Promise<Hospital | null> {
+  const data = await serverApiGetOrNull<{ hospital: Hospital }>(
+    `/api/hospitals/${id}`,
+  );
+  return data?.hospital ?? null;
+}
+
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   const { id } = await params;
-  const hospital = await getHospital(id);
+  const hospital = await fetchHospital(id);
   if (!hospital) return { title: "Hospital no encontrado · Mapa de Emergencia" };
   return {
     title: `${hospital.name} · Hospitales · Mapa de Emergencia Venezuela`,
@@ -29,15 +38,21 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 
 export default async function HospitalPage({ params }: PageProps) {
   const { id } = await params;
-  const hospital = await getHospital(id);
+  const hospital = await fetchHospital(id);
   if (!hospital) notFound();
   const canonicalSlug = buildHospitalSlug(hospital);
   if (id !== canonicalSlug) redirect(`/hospitales/${canonicalSlug}`);
 
-  const [patients, supply] = await Promise.all([
-    listPatients(hospital.id),
-    getPublicHospitalSupplySummary(hospital.id),
+  const [patientsRes, supplyRes] = await Promise.all([
+    serverApiGet<{ patients: HospitalPatient[] }>(
+      `/api/hospitals/${hospital.id}/patients`,
+    ),
+    serverApiGet<{ supply: PublicHospitalSupplySummary | null }>(
+      `/api/hospitals/${hospital.id}/supplies`,
+    ),
   ]);
+  const patients = patientsRes.patients ?? [];
+  const supply = supplyRes.supply ?? undefined;
   const zone = PRIORITY_ZONE_META[hospital.priorityZone];
   const facility = FACILITY_TYPE_META[hospital.facilityType];
 

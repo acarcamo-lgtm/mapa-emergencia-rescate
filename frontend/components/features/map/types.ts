@@ -1,5 +1,5 @@
 import type { EmergencyReport } from "@/lib/types";
-import type { MissingMapMarker } from "@/lib/missing";
+import type { MissingMapMarker } from "@/hooks/missing";
 
 export type MapBounds = {
 	north: number;

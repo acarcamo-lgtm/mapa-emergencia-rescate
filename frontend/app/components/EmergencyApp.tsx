@@ -18,7 +18,7 @@ import {
 	EDIFICIOS_SOURCE_LABEL,
 	EDIFICIOS_SOURCE_URL,
 } from "@/lib/edificios";
-import type { MissingMapMarker } from "@/lib/missing";
+import type { MissingMapMarker } from "@/hooks/missing";
 import { useMissingStats } from "./useMissingStats";
 import type { MapBounds } from "./MapView";
 import {

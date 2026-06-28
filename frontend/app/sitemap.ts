@@ -1,6 +1,6 @@
 import type { MetadataRoute } from "next";
-import { listHospitals } from "@/lib/hospitals";
-import { buildHospitalSlug } from "@/lib/hospitals-meta";
+import { serverApiGet } from "@/lib/server-api";
+import { buildHospitalSlug, type Hospital } from "@/lib/hospitals-meta";
 
 const SITE_URL = "https://terremotovenezuela.app";
 
@@ -29,13 +29,15 @@ const STATIC_PATHS = [
   { path: "/apoyo-disponible", changeFrequency: "weekly" as const, priority: 0.7 },
 ] as const;
 
-const DB_TIMEOUT_MS = 5_000;
+const API_TIMEOUT_MS = 5_000;
 
-async function listHospitalsWithTimeout() {
+async function listHospitalsWithTimeout(): Promise<Hospital[]> {
   return Promise.race([
-    listHospitals({ limit: 1000 }),
-    new Promise<Awaited<ReturnType<typeof listHospitals>>>((resolve) =>
-      setTimeout(() => resolve([]), DB_TIMEOUT_MS),
+    serverApiGet<{ hospitals: Hospital[] }>("/api/hospitals?limit=1000").then(
+      (data) => data.hospitals ?? [],
+    ),
+    new Promise<Hospital[]>((resolve) =>
+      setTimeout(() => resolve([]), API_TIMEOUT_MS),
     ),
   ]);
 }

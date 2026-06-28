@@ -34,6 +34,19 @@ export interface MissingPerson {
   createdAt: number;
 }
 
+/** Marcador ligero para el mapa (subset de MissingPerson + lat/lng). */
+export interface MissingMapMarker {
+  id: string;
+  name: string;
+  age: number | null;
+  nationality: string;
+  lastSeen: string;
+  photoUrl: string | null;
+  lat: number;
+  lng: number;
+  createdAt: number;
+}
+
 export interface MissingListResponse {
   people: MissingPerson[];
   total: number;

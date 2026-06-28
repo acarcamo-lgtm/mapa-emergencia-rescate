@@ -17,7 +17,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiGet, apiSend } from "@/lib/api";
 import { qk } from "@/lib/query-keys";
 import type { EmergencyReport } from "@/lib/types";
-import type { MissingMapMarker } from "@/lib/missing";
+import type { MissingMapMarker } from "@/hooks/missing";
 import type { MapBounds } from "@/app/components/MapView";
 
 export interface ReportsResponse {
