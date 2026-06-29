@@ -15,7 +15,7 @@ encontrar, mover y **borrar** (cada feature es una carpeta autocontenida).
 
 ```
 app/                          # SOLO rutas. page/layout/loading/error/not-found finos.
-  (marketing)/                # route group — landing y páginas de contenido. NO cambia URLs.
+  (content)/                  # route group — páginas de contenido (guía, legales, contacto…). NO cambia URLs.
   (app)/                      # route group — superficie principal (home, hospitales…).
   (admin)/                    # route group — panel admin.
   layout.tsx · sitemap.ts · robots.ts · opengraph-image…
@@ -34,9 +34,9 @@ components/
     types.ts                  # tipos locales de la feature.
 
 hooks/<dominio>.ts            # data hooks compartidos (TanStack Query). Ver §3.
-lib/                          # framework-agnostic: api, query-keys, query-client,
+lib/                          # framework-agnostic: api, query-keys, get-query-client,
   data/                       # datos estáticos (seeds, catálogos, tablas grandes).
-  …                           # format, types, severity, site, share, analytics…
+  …                           # metadata (SEO), format, types, severity, site, share, analytics…
 ```
 
 Reglas del árbol:
@@ -131,10 +131,11 @@ Duda "¿ui o feature?": si el componente nombra o conoce un concepto del dominio
 
 ---
 
-## Apéndice — Mapa de migración (legacy `app/components/` → destino)
+## Apéndice — Mapa de migración (legacy `app/components/` → destino) ✅ COMPLETADO
 
-Estado actual: 41 archivos amontonados en `app/components/` (~10k líneas). Destino
-por archivo (se ejecuta en los commits de route groups y split de monolitos):
+Migración terminada: `app/components/` quedó vacío y se eliminó; todo vive ahora en
+`components/{ui,layout,features}`, `hooks/` y `lib/`. Se conserva el mapa como
+registro de dónde quedó cada archivo:
 
 **→ `components/layout/`** (chrome global)
 `SectionNav` · `SiteFooter` · `HeroSection` · `AlertTicker` · `TutorialSteps` ·
