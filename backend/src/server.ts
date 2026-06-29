@@ -19,6 +19,7 @@ import { hubRouter } from "@/routes/hub";
 import { syncRouter } from "@/routes/sync";
 import { adminRouter } from "@/routes/admin";
 import { opRouter } from "@/routes/op";
+import { recursosRouter } from "@/routes/recursos";
 
 const app = express();
 
@@ -104,6 +105,7 @@ app.use("/api/hub", hubRouter);
 app.use("/api/sync", syncRouter);
 app.use("/api/admin", adminRouter);
 app.use("/api/op", opRouter);
+app.use("/api/recursos", recursosRouter);
 
 // 404 JSON consistente para /api/*.
 app.use("/api", (_req, res) => res.status(404).json({ error: "Ruta no encontrada." }));

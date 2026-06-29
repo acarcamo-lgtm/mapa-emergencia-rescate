@@ -41,4 +41,9 @@ export const qk = {
     all: ["contact"] as const,
   },
   geocode: (q: string) => ["geocode", q] as const,
+  coordinacion: {
+    all: ["coordinacion"] as const,
+    pool: ["coordinacion", "pool"] as const,
+    kinds: ["coordinacion", "kinds"] as const,
+  },
 } as const;

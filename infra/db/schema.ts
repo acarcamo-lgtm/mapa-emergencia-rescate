@@ -797,3 +797,41 @@ export const auditLog = pgTable(
     index("idx_audit_target").on(t.targetType, t.targetId),
   ],
 );
+
+/* -------------------------------------------------------------- coord_kinds */
+// Registro de TIPOS de recurso para la coordinación de aporte privado
+// (maquinaria pesada, flete, combustible, voluntarios, etc.). Es DATA, no
+// código: agregar un tipo nuevo = una fila. `campos` describe el formulario del
+// tipo y `moviliza_con` qué necesita ese tipo para movilizarse (otros kinds).
+export const coordKinds = pgTable("coord_kinds", {
+  key: text("key").primaryKey(),
+  label: text("label").notNull(),
+  icono: text("icono").notNull(),
+  categoria: text("categoria").notNull(),
+  campos: jsonb("campos").notNull().default(sql`'[]'::jsonb`),
+  movilizaCon: jsonb("moviliza_con").notNull().default(sql`'[]'::jsonb`),
+  esPiezaDeMision: boolean("es_pieza_de_mision").notNull().default(true),
+  orden: integer("orden").notNull().default(0),
+});
+
+/* ----------------------------------------------------------- coord_recursos */
+// La OFERTA: una capacidad que alguien aporta. Un solo objeto para todos los
+// tipos (kind + atributos jsonb). `whatsapp` es PII: NUNCA se expone en el
+// listado público (DTO allowlist en services/recursos.ts); se entrega solo, y
+// con rate-limit, vía GET /api/recursos/:id/contacto.
+export const coordRecursos = pgTable(
+  "coord_recursos",
+  {
+    id: text("id").primaryKey(), // app genera crypto.randomUUID()
+    kind: text("kind")
+      .notNull()
+      .references(() => coordKinds.key),
+    estado: text("estado").notNull().default("disponible"), // disponible | asignado | usado
+    nombreContacto: text("nombre_contacto").notNull(),
+    whatsapp: text("whatsapp").notNull(), // PII — fuera del DTO de lista
+    zona: text("zona"),
+    atributos: jsonb("atributos").notNull().default(sql`'{}'::jsonb`),
+    createdAt: epochMs("created_at").notNull(),
+  },
+  (t) => [index("idx_coord_recursos_estado").on(t.estado, t.createdAt.desc())],
+);

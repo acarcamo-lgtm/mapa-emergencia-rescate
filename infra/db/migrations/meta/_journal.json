@@ -64,6 +64,13 @@
       "when": 1782686198127,
       "tag": "0008_omniscient_eternity",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1782712955548,
+      "tag": "0009_slow_photon",
+      "breakpoints": true
     }
   ]
 }
