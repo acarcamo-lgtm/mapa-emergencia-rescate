@@ -158,6 +158,9 @@ export default function ReportForm({
       <div
         ref={dialogRef}
         tabIndex={-1}
+        onKeyDown={(e) => {
+          if (e.key === "Escape") onCancel();
+        }}
         className="max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-t-2xl bg-[var(--esurf)] p-5 shadow-xl outline-none sm:rounded-2xl sm:p-6"
       >
         <div className="mb-3 flex items-start justify-between">

@@ -34,6 +34,9 @@ export default function ImageZoomLightbox({
 
   return (
     <div
+      role="dialog"
+      aria-modal="true"
+      aria-label={alt || "Imagen ampliada"}
       className="fixed inset-0 z-[3000] flex items-center justify-center bg-black/90"
       onClick={onClose}
     >

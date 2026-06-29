@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { trackEvent } from "@/lib/openpanel";
 import { useTurnstile } from "@/hooks/useTurnstile";
 
@@ -102,6 +102,14 @@ export default function MissingFoundForm({
     },
     [note, photo, onSubmit, turnstileGetToken],
   );
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onCancel();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onCancel]);
 
   return (
     <div
