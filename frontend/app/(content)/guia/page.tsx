@@ -1,5 +1,6 @@
 import dynamic from "next/dynamic";
 import type { Metadata } from "next";
+import { pageMetadata } from "@/lib/metadata";
 import SubPageShell from "@/components/layout/SubPageShell";
 
 const SurvivalGuide = dynamic(
@@ -13,12 +14,12 @@ const SurvivalGuide = dynamic(
   },
 );
 
-export const metadata: Metadata = {
-  title: "Guía rápida de emergencia · Mapa de Emergencia Venezuela",
-  alternates: { canonical: "/guia" },
+export const metadata: Metadata = pageMetadata({
+  title: "Guía rápida de emergencia",
   description:
     "Pasos esenciales antes, durante y después de un sismo. Cómo proteger a tu familia y solicitar ayuda.",
-};
+  path: "/guia",
+});
 
 export default function GuiaPage() {
   return (

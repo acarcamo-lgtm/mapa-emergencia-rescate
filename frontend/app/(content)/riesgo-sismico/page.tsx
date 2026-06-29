@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { Metadata } from "next";
+import { pageMetadata } from "@/lib/metadata";
 import SubPageShell from "@/components/layout/SubPageShell";
 import SeismicRiskMap from "@/components/features/seismic/SeismicRiskMap";
 import {
@@ -13,12 +14,12 @@ import {
   type SeismicRiskLevel,
 } from "@/lib/seismic-risk";
 
-export const metadata: Metadata = {
-  title: "Riesgo sísmico de inspección · Mapa de Emergencia Venezuela",
-  alternates: { canonical: "/riesgo-sismico" },
+export const metadata: Metadata = pageMetadata({
+  title: "Riesgo sísmico de inspección",
   description:
     "Vista de priorización para inspección sísmica basada en sacudida estimada por USGS, exposición poblacional y huellas de edificios de OpenStreetMap.",
-};
+  path: "/riesgo-sismico",
+});
 
 const levelLabel: Record<SeismicRiskLevel, string> = {
   critical: "Crítico",

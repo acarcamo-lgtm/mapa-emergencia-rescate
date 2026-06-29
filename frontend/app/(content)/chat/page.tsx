@@ -1,5 +1,6 @@
 import dynamic from "next/dynamic";
 import type { Metadata } from "next";
+import { pageMetadata } from "@/lib/metadata";
 import SubPageShell from "@/components/layout/SubPageShell";
 
 const ChatPanel = dynamic(() => import("@/components/features/chat/ChatPanel"), {
@@ -10,12 +11,12 @@ const ChatPanel = dynamic(() => import("@/components/features/chat/ChatPanel"), 
   ),
 });
 
-export const metadata: Metadata = {
-  title: "Chat de voluntarios · Mapa de Emergencia Venezuela",
-  alternates: { canonical: "/chat" },
+export const metadata: Metadata = pageMetadata({
+  title: "Chat de voluntarios",
   description:
     "Coordina rescates, suministros y difusión con otros voluntarios en tiempo real.",
-};
+  path: "/chat",
+});
 
 export default function ChatPage() {
   return (

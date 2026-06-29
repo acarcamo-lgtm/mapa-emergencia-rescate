@@ -1,14 +1,15 @@
 import type { Metadata } from "next";
+import { pageMetadata } from "@/lib/metadata";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import SubPageShell from "@/components/layout/SubPageShell";
 
-export const metadata: Metadata = {
-  title: "Apoyo disponible · Mapa de Emergencia Venezuela",
-  alternates: { canonical: "/apoyo-disponible" },
+export const metadata: Metadata = pageMetadata({
+  title: "Apoyo disponible",
   description:
     "Directorio de apoyo durante el terremoto: psicológico, civil y rescate, transporte, discapacidad, mascotas y más. Contactos directos.",
-};
+  path: "/apoyo-disponible",
+});
 
 /** Convierte un número mostrado a un href tel: válido para marcar al tocarlo. */
 function telHref(display: string): string {

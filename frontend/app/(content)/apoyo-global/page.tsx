@@ -1,5 +1,6 @@
 import dynamic from "next/dynamic";
 import type { Metadata } from "next";
+import { pageMetadata } from "@/lib/metadata";
 import SubPageShell from "@/components/layout/SubPageShell";
 
 const InternationalHelp = dynamic(
@@ -13,12 +14,12 @@ const InternationalHelp = dynamic(
   },
 );
 
-export const metadata: Metadata = {
-  title: "Apoyo global · Mapa de Emergencia Venezuela",
-  alternates: { canonical: "/apoyo-global" },
+export const metadata: Metadata = pageMetadata({
+  title: "Apoyo global",
   description:
     "Cómo sumarte desde el exterior: donaciones, organizaciones aliadas y formas de difundir la emergencia.",
-};
+  path: "/apoyo-global",
+});
 
 export default function ApoyoGlobalPage() {
   return (

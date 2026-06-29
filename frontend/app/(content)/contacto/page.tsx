@@ -1,13 +1,14 @@
 import type { Metadata } from "next";
+import { pageMetadata } from "@/lib/metadata";
 import ContactForm from "@/components/features/contacts/ContactForm";
 import SubPageShell from "@/components/layout/SubPageShell";
 import { CONTACT_EMAIL, contactMailto } from "@/lib/site";
 
-export const metadata: Metadata = {
-  title: "Contacto · Mapa de Emergencia Venezuela",
-  alternates: { canonical: "/contacto" },
+export const metadata: Metadata = pageMetadata({
+  title: "Contacto",
   description: `Escríbenos en ${CONTACT_EMAIL} o usa el formulario de contacto.`,
-};
+  path: "/contacto",
+});
 
 export default function ContactoPage() {
   return (

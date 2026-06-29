@@ -11,6 +11,8 @@ import {
   type PublicHospitalSupplySummary,
 } from "@/lib/hospitals-meta";
 import HospitalDetailView from "@/components/features/hospitals/HospitalDetailView";
+import { pageMetadata } from "@/lib/metadata";
+import { SITE_URL } from "@/lib/site";
 
 export const dynamic = "force-dynamic";
 
@@ -28,12 +30,18 @@ async function fetchHospital(id: string): Promise<Hospital | null> {
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   const { id } = await params;
   const hospital = await fetchHospital(id);
-  if (!hospital) return { title: "Hospital no encontrado · Mapa de Emergencia" };
-  return {
-    title: `${hospital.name} · Hospitales · Mapa de Emergencia Venezuela`,
+  if (!hospital) {
+    return pageMetadata({
+      title: "Hospital no encontrado",
+      description: "No encontramos el hospital solicitado.",
+      index: false,
+    });
+  }
+  return pageMetadata({
+    title: `${hospital.name} · Hospitales`,
     description: `Información, pacientes registrados y datos del ${hospital.name} en ${hospital.state}.`,
-    alternates: { canonical: `/hospitales/${buildHospitalSlug(hospital)}` },
-  };
+    path: `/hospitales/${buildHospitalSlug(hospital)}`,
+  });
 }
 
 export default async function HospitalPage({ params }: PageProps) {
@@ -56,8 +64,28 @@ export default async function HospitalPage({ params }: PageProps) {
   const zone = PRIORITY_ZONE_META[hospital.priorityZone];
   const facility = FACILITY_TYPE_META[hospital.facilityType];
 
+  const hospitalJsonLd = {
+    "@context": "https://schema.org",
+    "@type": "Hospital",
+    name: hospital.name,
+    url: `${SITE_URL}/hospitales/${canonicalSlug}`,
+    address: {
+      "@type": "PostalAddress",
+      ...(hospital.address ? { streetAddress: hospital.address } : {}),
+      addressLocality: hospital.municipality || hospital.state,
+      addressRegion: hospital.state,
+      addressCountry: "VE",
+    },
+  };
+
   return (
     <main className="flex-1 bg-slate-50">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify(hospitalJsonLd).replace(/</g, "\\u003c"),
+        }}
+      />
       <div className="border-b border-slate-200 bg-white">
         <div className="mx-auto flex w-full max-w-5xl items-center gap-2 px-4 py-3 text-sm text-slate-500">
           <Link href="/" className="hover:text-slate-700 hover:underline">

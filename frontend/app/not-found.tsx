@@ -1,10 +1,14 @@
 import Link from "next/link";
 import type { Metadata } from "next";
+import { pageMetadata } from "@/lib/metadata";
 import SubPageShell from "@/components/layout/SubPageShell";
 
-export const metadata: Metadata = {
-  title: "Página no encontrada · Mapa de Emergencia Venezuela",
-};
+export const metadata: Metadata = pageMetadata({
+  title: "Página no encontrada",
+  description:
+    "La página que buscas no existe o fue movida. Vuelve al inicio para seguir reportando o consultando información.",
+  index: false,
+});
 
 export default function NotFound() {
   return (

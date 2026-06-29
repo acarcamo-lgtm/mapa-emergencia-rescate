@@ -5,6 +5,7 @@ import SubPageShell from "@/components/layout/SubPageShell";
 import { getQueryClient } from "@/lib/get-query-client";
 import { qk } from "@/lib/query-keys";
 import { serverApiGetCached } from "@/lib/server-api";
+import { pageMetadata } from "@/lib/metadata";
 import type { HospitalsResponse } from "@/hooks/hospitals";
 
 export const revalidate = 300;
@@ -17,12 +18,12 @@ const Hospitals = dynamic(() => import("@/components/features/hospitals"), {
   ),
 });
 
-export const metadata: Metadata = {
-  title: "Hospitales y pacientes · Mapa de Emergencia Venezuela",
-  alternates: { canonical: "/hospitales" },
+export const metadata: Metadata = pageMetadata({
+  title: "Hospitales y pacientes",
   description:
     "Red hospitalaria priorizada con búsqueda global de pacientes por nombre o número de cédula.",
-};
+  path: "/hospitales",
+});
 
 export default async function HospitalesPage() {
   const queryClient = getQueryClient();

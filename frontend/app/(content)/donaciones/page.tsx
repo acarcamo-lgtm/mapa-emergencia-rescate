@@ -1,13 +1,14 @@
 import type { Metadata } from "next";
+import { pageMetadata } from "@/lib/metadata";
 import SubPageShell from "@/components/layout/SubPageShell";
 import { Info } from "lucide-react";
 import OfertasList from "./OfertasList";
 
-export const metadata: Metadata = {
-  title: "Donaciones · Mapa de Emergencia Venezuela",
-  alternates: { canonical: "/donaciones" },
+export const metadata: Metadata = pageMetadata({
+  title: "Donaciones",
   description: "Dona dinero, sangre o insumos a organizaciones verificadas que trabajan en el terreno.",
-};
+  path: "/donaciones",
+});
 
 export default function DonacionesPage() {
   return (

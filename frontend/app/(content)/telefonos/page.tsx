@@ -1,5 +1,6 @@
 import dynamic from "next/dynamic";
 import type { Metadata } from "next";
+import { pageMetadata } from "@/lib/metadata";
 import SubPageShell from "@/components/layout/SubPageShell";
 
 const EmergencyContacts = dynamic(
@@ -13,12 +14,12 @@ const EmergencyContacts = dynamic(
   },
 );
 
-export const metadata: Metadata = {
-  title: "Teléfonos de emergencia · Mapa de Emergencia Venezuela",
-  alternates: { canonical: "/telefonos" },
+export const metadata: Metadata = pageMetadata({
+  title: "Teléfonos de emergencia",
   description:
     "Directorio actualizado de teléfonos para emergencias, salud, rescate y servicios públicos durante el terremoto.",
-};
+  path: "/telefonos",
+});
 
 export default function TelefonosPage() {
   return (

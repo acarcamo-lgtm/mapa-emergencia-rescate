@@ -1,5 +1,6 @@
 import dynamic from "next/dynamic";
 import type { Metadata } from "next";
+import { pageMetadata } from "@/lib/metadata";
 import SubPageShell from "@/components/layout/SubPageShell";
 
 const CollectionCenters = dynamic(
@@ -13,12 +14,12 @@ const CollectionCenters = dynamic(
   },
 );
 
-export const metadata: Metadata = {
-  title: "Centros de acopio · Mapa de Emergencia Venezuela",
-  alternates: { canonical: "/acopio" },
+export const metadata: Metadata = pageMetadata({
+  title: "Centros de acopio",
   description:
     "Puntos verificados para entregar agua, alimentos, medicinas y artículos de primera necesidad.",
-};
+  path: "/acopio",
+});
 
 export default function AcopioPage() {
   return (

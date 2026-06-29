@@ -1,12 +1,13 @@
 import Link from "next/link";
 import type { Metadata } from "next";
+import { pageMetadata } from "@/lib/metadata";
 
-export const metadata: Metadata = {
-  title: "Política de privacidad · Mapa de Emergencia Venezuela",
-  alternates: { canonical: "/privacidad" },
+export const metadata: Metadata = pageMetadata({
+  title: "Política de privacidad",
   description:
     "Cómo manejamos los datos publicados en el mapa, el chat y el módulo de personas desaparecidas.",
-};
+  path: "/privacidad",
+});
 
 export default function PrivacidadPage() {
   return (

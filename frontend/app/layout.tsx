@@ -9,6 +9,7 @@ import StickyHelpButton from "@/components/layout/StickyHelpButton";
 import OpenPanelProduction from "@/components/layout/OpenPanelProduction";
 import ThemeProvider from "@/components/layout/ThemeProvider";
 import QueryProvider from "@/components/layout/QueryProvider";
+import { SITE_URL } from "@/lib/site";
 
 const stara = localFont({
   src: [
@@ -63,7 +64,6 @@ const spaceGrotesk = Space_Grotesk({
   display: "swap",
 });
 
-const SITE_URL = "https://terremotovenezuela.app";
 const SITE_TITLE = "Mapa de Emergencia y Rescate · Terremoto en Venezuela";
 const SITE_DESC =
   "Reporte ciudadano en tiempo real para coordinar rescates, identificar daños estructurales y organizar la entrega de ayuda humanitaria tras el terremoto en Venezuela.";

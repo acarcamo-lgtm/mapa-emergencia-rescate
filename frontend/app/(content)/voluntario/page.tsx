@@ -1,11 +1,12 @@
 import type { Metadata } from "next";
+import { pageMetadata } from "@/lib/metadata";
 import SubPageShell from "@/components/layout/SubPageShell";
 
-export const metadata: Metadata = {
-  title: "Registrarme como voluntario · Mapa de Emergencia Venezuela",
-  alternates: { canonical: "/voluntario" },
+export const metadata: Metadata = pageMetadata({
+  title: "Registrarme como voluntario",
   description: "Ofrece tu tiempo en labores de rescate, apoyo logístico o asistencia médica.",
-};
+  path: "/voluntario",
+});
 
 export default function VoluntarioPage() {
   return (
