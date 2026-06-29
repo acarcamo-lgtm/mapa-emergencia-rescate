@@ -8,6 +8,7 @@ import AddressSearch, {
   type GeocodeResult,
 } from "@/components/features/emergency/AddressSearch";
 import FilterChips from "./FilterChips";
+import { ErrorBoundary } from "@/components/ui/ErrorBoundary";
 
 // Mapa Leaflet: pesado + depende de window. next/dynamic ssr:false lo saca del
 // bundle inicial y lo carga en cliente solo cuando esta vista se monta.
@@ -79,23 +80,35 @@ export default function MapPanel({
         placing ? "is-placing" : ""
       }`}
     >
-      <MapView
-        reports={mapReports}
-        missingMarkers={missingMapMarkers}
-        showMissingOnMap={showMissingOnMap}
-        onBoundsChange={onBoundsChange}
-        draft={draft}
-        onPick={onPick}
-        onResolve={onResolve}
-        onConfirm={onConfirm}
-        confirmed={confirmed}
-        isAdmin={isAdmin}
-        focus={focus}
-        center={center}
-        zoom={12}
-        fitRequest={fitRequest}
-        showEdificios={showEdificios}
-      />
+      <ErrorBoundary
+        fallback={
+          <div className="flex h-full w-full flex-col items-center justify-center gap-2 bg-slate-100 p-6 text-center text-sm text-slate-600">
+            <span className="text-2xl" aria-hidden>
+              🗺️
+            </span>
+            <p className="font-semibold">No se pudo cargar el mapa</p>
+            <p>Recarga la página para volver a intentarlo.</p>
+          </div>
+        }
+      >
+        <MapView
+          reports={mapReports}
+          missingMarkers={missingMapMarkers}
+          showMissingOnMap={showMissingOnMap}
+          onBoundsChange={onBoundsChange}
+          draft={draft}
+          onPick={onPick}
+          onResolve={onResolve}
+          onConfirm={onConfirm}
+          confirmed={confirmed}
+          isAdmin={isAdmin}
+          focus={focus}
+          center={center}
+          zoom={12}
+          fitRequest={fitRequest}
+          showEdificios={showEdificios}
+        />
+      </ErrorBoundary>
 
       {/* Buscador + filtros por tipo sobre el mapa (referencia QiHealth). */}
       <div className="map-overlay pointer-events-none absolute inset-x-0 top-0 z-[1000] flex flex-col gap-2 p-3 sm:pr-14">
