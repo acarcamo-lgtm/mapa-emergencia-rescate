@@ -6,7 +6,7 @@ import { CONTACT_EMAIL, contactMailto } from "@/lib/site";
 
 export const metadata: Metadata = pageMetadata({
   title: "Contacto",
-  description: `Escríbenos en ${CONTACT_EMAIL} o usa el formulario de contacto.`,
+  description: `Escríbenos en ${CONTACT_EMAIL} o usa el formulario de contacto. Iniciativa ciudadana, independiente y no gubernamental.`,
   path: "/contacto",
 });
 

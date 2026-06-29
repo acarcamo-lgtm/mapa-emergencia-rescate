@@ -39,7 +39,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   }
   return pageMetadata({
     title: `${hospital.name} · Hospitales`,
-    description: `Información, pacientes registrados y datos del ${hospital.name} en ${hospital.state}.`,
+    description: `Información, pacientes registrados y datos del ${hospital.name} en ${hospital.state}. Iniciativa ciudadana, independiente y no gubernamental.`,
     path: `/hospitales/${buildHospitalSlug(hospital)}`,
   });
 }
@@ -141,8 +141,16 @@ export default async function HospitalPage({ params }: PageProps) {
           )}
 
           <div className="mt-5 grid max-w-2xl grid-cols-2 gap-2 sm:grid-cols-3">
-            <Stat label="Hospitalizados" value={hospital.activePatients} accent="#1d4ed8" />
-            <Stat label="Total pacientes" value={hospital.totalPatients} accent="#0f172a" />
+            <Stat
+              label="Hospitalizados"
+              value={hospital.activePatients}
+              accent="#1d4ed8"
+            />
+            <Stat
+              label="Total pacientes"
+              value={hospital.totalPatients}
+              accent="#0f172a"
+            />
             <Stat label="Zona" value={zone.label} accent={zone.color} />
           </div>
         </div>

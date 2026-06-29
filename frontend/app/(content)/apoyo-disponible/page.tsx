@@ -7,7 +7,7 @@ import SubPageShell from "@/components/layout/SubPageShell";
 export const metadata: Metadata = pageMetadata({
   title: "Apoyo disponible",
   description:
-    "Directorio de apoyo durante el terremoto: psicológico, civil y rescate, transporte, discapacidad, mascotas y más. Contactos directos.",
+    "Directorio de apoyo durante el terremoto: psicológico, civil y rescate, transporte, discapacidad, mascotas y más. Contactos directos. Iniciativa ciudadana, independiente y no gubernamental.",
   path: "/apoyo-disponible",
 });
 

@@ -6,7 +6,7 @@ import OfertasList from "./OfertasList";
 
 export const metadata: Metadata = pageMetadata({
   title: "Donaciones",
-  description: "Dona dinero, sangre o insumos a organizaciones verificadas que trabajan en el terreno.",
+  description: "Dona dinero, sangre o insumos a organizaciones verificadas que trabajan en el terreno. Iniciativa ciudadana, independiente y no gubernamental.",
   path: "/donaciones",
 });
 

@@ -1,6 +1,9 @@
 import type { Metadata } from "next";
 import { SITE_NAME } from "@/lib/site";
 
+const OG_IMAGE = "/opengraph-image.png";
+const TWITTER_IMAGE = "/twitter-image.png";
+
 interface PageMetadataInput {
   title: string;
   description: string;
@@ -22,11 +25,14 @@ export function pageMetadata({
       title: fullTitle,
       description,
       type: "website",
+      images: [OG_IMAGE],
       ...(path ? { url: path } : {}),
     },
     twitter: {
+      card: "summary_large_image",
       title: fullTitle,
       description,
+      images: [TWITTER_IMAGE],
     },
   };
   if (path) meta.alternates = { canonical: path };

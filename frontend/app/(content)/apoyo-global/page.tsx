@@ -17,7 +17,7 @@ const InternationalHelp = dynamic(
 export const metadata: Metadata = pageMetadata({
   title: "Apoyo global",
   description:
-    "Cómo sumarte desde el exterior: donaciones, organizaciones aliadas y formas de difundir la emergencia.",
+    "Cómo sumarte desde el exterior: donaciones, organizaciones aliadas y formas de difundir la emergencia. Iniciativa ciudadana, independiente y no gubernamental.",
   path: "/apoyo-global",
 });
 
